@@ -2,7 +2,9 @@ import { useState } from "react";
 import { CFODashboard } from "./pages/CFODashboard";
 import { DataUploadPage } from "./pages/DataUploadPage";
 import { OpcoMDDashboard } from "./pages/OpcoMDDashboard";
+import { PortfolioPage } from "./pages/PortfolioPage";
 import { AppNav } from "./components/layout/AppNav";
+import { AgentPanel } from "./agent/AgentPanel";
 import { useAppData } from "./hooks/useAppData";
 import type { RoleId, ScenarioId, TraceSelection } from "./types";
 
@@ -12,7 +14,8 @@ export default function App() {
   const [scenario, setScenario] = useState<ScenarioId>("base");
   const [traceSelection, setTraceSelection] = useState<TraceSelection | null>(null);
 
-  const dashboardBlocked = role !== "data" && (loading || error);
+  const dashboardBlocked =
+    role !== "data" && role !== "portfolio" && (loading || error);
 
   return (
     <div className="dark min-h-screen bg-background text-foreground">
@@ -23,9 +26,20 @@ export default function App() {
         onScenarioChange={setScenario}
       />
 
+      <AgentPanel
+        forecast={forecast}
+        wip={wip}
+        covenant={covenant}
+        weatherInsights={weatherInsights}
+        scenario={scenario}
+        onSetScenario={setScenario}
+      />
+
       <div className="lg:pl-24">
         <main className="mx-auto max-w-7xl px-4 pb-24 pt-6 sm:px-6 lg:px-8 lg:pb-8">
-          {role === "data" ? (
+          {role === "portfolio" ? (
+            <PortfolioPage />
+          ) : role === "data" ? (
             <DataUploadPage />
           ) : dashboardBlocked && loading ? (
             <div className="flex items-center justify-center py-24 text-muted-foreground">

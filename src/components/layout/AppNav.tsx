@@ -3,6 +3,7 @@ import {
   Database,
   LayoutDashboard,
   Layers,
+  Map,
   Users,
 } from "lucide-react";
 import type { RoleId, ScenarioId } from "../../types";
@@ -18,6 +19,7 @@ interface AppNavProps {
 const navItems: { id: RoleId; label: string; icon: typeof LayoutDashboard }[] = [
   { id: "cfo", label: "CFO Forecast", icon: LayoutDashboard },
   { id: "opco", label: "Opco MD", icon: Users },
+  { id: "portfolio", label: "Portfolio Map", icon: Map },
   { id: "data", label: "Data Upload", icon: Database },
 ];
 
