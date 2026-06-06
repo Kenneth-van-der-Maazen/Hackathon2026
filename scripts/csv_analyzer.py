@@ -9,7 +9,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from unified_schema import GL_CATEGORIES, gl_category, load_gl_mapping_file, normalize_amount, parse_date
+from data_stores import resolve_store_routing
+from unified_schema import GL_CATEGORIES, duplicate_stats, gl_category, load_gl_mapping_file, normalize_amount, parse_date
 
 # Column name patterns → unified field
 COLUMN_PATTERNS: dict[str, list[str]] = {
@@ -116,6 +117,8 @@ class AnalysisResult:
     ai_briefing: dict | None = None
     sheet_name: str | None = None
     file_type: str = "csv"
+    duplicate_check: dict | None = None
+    store_routing: dict | None = None
 
     def to_dict(self) -> dict:
         out = {
@@ -139,6 +142,10 @@ class AnalysisResult:
         }
         if self.ai_briefing:
             out["aiBriefing"] = self.ai_briefing
+        if self.duplicate_check:
+            out["duplicateCheck"] = self.duplicate_check
+        if self.store_routing:
+            out["storeRouting"] = self.store_routing
         return out
 
 
@@ -368,6 +375,15 @@ def analyze_csv(
                 sug.reason = ai.get("reason", sug.reason)
 
     ai_briefing = ai_enhancement.get("ai_briefing") if ai_enhancement else None
+    ai_type = ai_briefing.get("dataType") if ai_briefing else None
+    ai_target = ai_briefing.get("targetStore") if ai_briefing else None
+    store_routing = resolve_store_routing(filename, normalized, ai_type, ai_target, gl_map)
+    dup_check = duplicate_stats(normalized, store_routing)
+
+    if dup_check["blockMerge"]:
+        warnings.append(dup_check["message"])
+    elif dup_check["duplicateRows"] > 0:
+        warnings.append(dup_check["message"])
 
     return AnalysisResult(
         upload_id=upload_id,
@@ -386,4 +402,6 @@ def analyze_csv(
         ai_briefing=ai_briefing,
         sheet_name=sheet_name,
         file_type=file_type,
+        duplicate_check=dup_check,
+        store_routing=store_routing,
     )

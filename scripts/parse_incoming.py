@@ -21,7 +21,9 @@ from pathlib import Path
 
 import openpyxl
 
+from data_stores import route_rows
 from fetch_weather import fetch_all_weather
+from unified_schema import write_stores_and_master
 
 ROOT = Path(__file__).resolve().parent.parent
 INCOMING = ROOT / "data" / "incoming"
@@ -286,54 +288,47 @@ def build_wip_csv(locations: list[dict], unified: list[dict]) -> None:
 def write_unified(rows: list[dict], locations: list[dict]) -> None:
     discovered = {r["gl_account"] for r in rows}
     write_gl_mapping(discovered)
+    gl_map = dict(GL_CATEGORY)
 
     for r in rows:
         r["gl_category"] = gl_category(r["gl_account"])
 
-    headers = ["date", "gl_account", "amount", "description", "opco", "project_id", "source_system", "gl_category", "city"]
-    OUT.mkdir(parents=True, exist_ok=True)
-    with (OUT / "unified_data.csv").open("w", newline="", encoding="utf-8") as f:
-        w = csv.DictWriter(f, fieldnames=headers, extrasaction="ignore")
-        w.writeheader()
-        w.writerows(rows)
-
-    mapping_rows = [{"gl_account": gl, "category": gl_category(gl), "status": "mapped"} for gl in sorted(discovered)]
-    unmapped = [gl for gl in discovered if gl_category(gl) == "unmapped"]
-    for gl in unmapped:
-        mapping_rows.append({"gl_account": gl, "category": "unmapped", "status": "flagged"})
-
-    with (OUT / "gl_mapping.csv").open("w", newline="", encoding="utf-8") as f:
-        w = csv.DictWriter(f, fieldnames=["gl_account", "category", "status"])
-        w.writeheader()
-        w.writerows(mapping_rows)
+    buckets = route_rows(rows, None, gl_map)
+    merged_by_store = {sid: bucket for sid, bucket in buckets.items() if bucket}
+    store_lines = [
+        f"  {sid}: {len(bucket):,} rows → unified_{sid}.csv"
+        for sid, bucket in merged_by_store.items()
+    ]
 
     notes = [
         "Real data ingestion — Altis Groep Hackathon",
         "",
         "Sources parsed from data/incoming/ zip files:",
-        "  portfolio company data     → Heeze (Exact) — location mapped by data owner",
-        "  portfolio company 2 data   → Brunssum / Peter Ummels (Yuki)",
-        "  Altis dataset 1.xlsx       → Andijk (Gilde monthly P&L)",
-        "  Altis dataset 2.xlsx       → Winschoten (Exact journal)",
+        "  portfolio company data     → Heeze (Exact GB 800x) → revenue store",
+        "  portfolio company 2 data   → Brunssum / Yuki FinTransactions → split by GL",
+        "  Altis dataset 1.xlsx       → Andijk (Gilde monthly P&L) → split by GL",
+        "  Altis dataset 2.xlsx       → Winschoten (Verkoop journal) → revenue store",
         "",
-        f"Total unified rows: {len(rows)}",
+        f"Total unified rows (master): {len(rows)}",
+        "Typed store breakdown:",
+        *store_lines,
         f"Opcos: {len({r['opco'] for r in rows})}",
         f"Cities: {', '.join(sorted({r['city'] for r in rows}))}",
         "",
         "Location column added — source files do not include company location.",
         "Weather.csv generated per city for schedule-delay modelling.",
     ]
-    (OUT / "data_notes.txt").write_text("\n".join(notes), encoding="utf-8")
+    write_stores_and_master(merged_by_store, gl_map, notes)
 
     public = ROOT / "public" / "data"
     public.mkdir(parents=True, exist_ok=True)
-    for name in ("unified_data.csv", "gl_mapping.csv", "data_notes.txt"):
-        (public / name).write_text((OUT / name).read_text(encoding="utf-8"), encoding="utf-8")
     (public / "opco_locations.json").write_text(
         json.dumps(locations, indent=2), encoding="utf-8"
     )
 
     print(f"Parsed {len(rows)} rows from real incoming data")
+    for sid, bucket in merged_by_store.items():
+        print(f"  → {sid}: {len(bucket):,} rows")
 
 
 def main() -> None:

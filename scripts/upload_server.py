@@ -16,7 +16,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from anthropic_analyzer import analyze_with_anthropic, anthropic_available, to_enhancement
 from csv_analyzer import ColumnMapping, analyze_csv, normalize_all_rows, read_all_csv_rows, read_csv_content
 from load_env import load_env
-from unified_schema import UPLOADS, load_gl_mapping_file, merge_rows, save_upload_meta, write_unified
+from unified_schema import (
+    UPLOADS,
+    load_gl_mapping_file,
+    merge_rows_routed,
+    save_upload_meta,
+    store_stats,
+    write_stores_and_master,
+)
 from xlsx_reader import save_xlsx_as_csv
 
 load_env()
@@ -198,10 +205,26 @@ async def confirm_upload(upload_id: str, body: dict):
         if sug.get("status") == "approved" and sug.get("suggestedCategory") != "unmapped":
             gl_map[sug["glAccount"]] = sug["suggestedCategory"]
 
-    merged, added = merge_rows(normalized, gl_map)
+    merged_by_store, added_by_store, added = merge_rows_routed(
+        normalized,
+        gl_map,
+        analysis.get("storeRouting")
+        or analysis.get("duplicateCheck", {}).get("storeRouting")
+        or body.get("storeRouting")
+        or {},
+    )
 
+    if added == 0:
+        raise HTTPException(
+            409,
+            "No new rows to merge — this file is already in the central database.",
+        )
+
+    routing = analysis.get("storeRouting") or analysis.get("duplicateCheck", {}).get("storeRouting") or {}
+    store_parts = [f"{added_by_store[sid]} → {sid}" for sid in added_by_store if added_by_store[sid]]
     notes = [
         f"Last upload: {analysis.get('filename')} ({added} new rows)",
+        f"Routed: {', '.join(store_parts) if store_parts else routing.get('targetStore', 'mixed')}",
         f"Source system: {defaults.get('source_system') or analysis.get('detectedSystem')}",
         f"Opco: {defaults.get('opco', '—')}",
     ]
@@ -210,7 +233,7 @@ async def confirm_upload(upload_id: str, body: dict):
     if warnings:
         notes.append("Warnings: " + "; ".join(warnings))
 
-    write_unified(merged, gl_map, notes)
+    all_rows = write_stores_and_master(merged_by_store, gl_map, notes)
 
     raw_gl = ROOT / "data" / "raw" / "gl_account_mapping.csv"
     raw_gl.parent.mkdir(parents=True, exist_ok=True)
@@ -222,7 +245,8 @@ async def confirm_upload(upload_id: str, body: dict):
 
     analysis["status"] = "confirmed"
     analysis["rowsAdded"] = added
-    analysis["totalRows"] = len(merged)
+    analysis["rowsAddedByStore"] = added_by_store
+    analysis["totalRows"] = len(all_rows)
     analysis["confirmWarnings"] = warnings
     (_upload_dir(upload_id) / "analysis.json").write_text(
         json.dumps(analysis, indent=2), encoding="utf-8"
@@ -248,7 +272,10 @@ async def confirm_upload(upload_id: str, body: dict):
     return {
         "ok": True,
         "rowsAdded": added,
-        "totalRows": len(merged),
+        "rowsAddedByStore": added_by_store,
+        "duplicateRowsSkipped": len(normalized) - added,
+        "totalRows": len(all_rows),
+        "storeRouting": routing,
         "forecastRan": forecast_ran,
         "forecastError": forecast_error,
         "warnings": warnings,
@@ -258,9 +285,18 @@ async def confirm_upload(upload_id: str, body: dict):
 @app.get("/api/unified/stats")
 def unified_stats():
     from unified_schema import read_unified
+
     rows = read_unified()
+    typed = store_stats()
     if not rows:
-        return {"totalRows": 0, "opcos": [], "systems": [], "unmappedGl": 0}
+        return {
+            "totalRows": 0,
+            "opcos": [],
+            "systems": [],
+            "cities": [],
+            "unmappedGl": 0,
+            "stores": typed["stores"],
+        }
 
     unmapped = sum(1 for r in rows if r.get("gl_category") == "unmapped")
     return {
@@ -269,7 +305,13 @@ def unified_stats():
         "systems": sorted({r["source_system"] for r in rows}),
         "cities": sorted({r.get("city", "") for r in rows if r.get("city")}),
         "unmappedGl": unmapped,
+        "stores": typed["stores"],
     }
+
+
+@app.get("/api/unified/stores")
+def unified_stores():
+    return store_stats()
 
 
 if __name__ == "__main__":

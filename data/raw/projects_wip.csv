@@ -1,1 +1,13 @@
 project_id,project_name,opco,contract_value,wip_to_date,pct_complete,milestone_name,milestone_pct,milestone_billing,scheduled_week,customer_segment,city
+PRJ-HEEZ-001,Heeze Roofing Project,Portfolio Company Heeze,17453719,3490744,20.0,Membrane install,0.3,85000,1,large,Heeze
+PRJ-HEEZ-001,Heeze Roofing Project,Portfolio Company Heeze,17453719,3490744,20.0,Insulation complete,0.55,120000,3,large,Heeze
+PRJ-HEEZ-001,Heeze Roofing Project,Portfolio Company Heeze,17453719,3490744,20.0,Handover,1.0,95000,5,large,Heeze
+PRJ-BRUN-001,Brunssum Roofing Project,Dakdekkersbedrijf Peter Ummels,19169216,5367381,28.0,Membrane install,0.3,85000,2,large,Brunssum
+PRJ-BRUN-001,Brunssum Roofing Project,Dakdekkersbedrijf Peter Ummels,19169216,5367381,28.0,Insulation complete,0.55,120000,4,large,Brunssum
+PRJ-BRUN-001,Brunssum Roofing Project,Dakdekkersbedrijf Peter Ummels,19169216,5367381,28.0,Handover,1.0,95000,6,large,Brunssum
+PRJ-ANDI-001,Andijk Roofing Project,Portfolio Company Andijk,18513953,6665023,36.0,Membrane install,0.3,85000,3,large,Andijk
+PRJ-ANDI-001,Andijk Roofing Project,Portfolio Company Andijk,18513953,6665023,36.0,Insulation complete,0.55,120000,5,large,Andijk
+PRJ-ANDI-001,Andijk Roofing Project,Portfolio Company Andijk,18513953,6665023,36.0,Handover,1.0,95000,7,large,Andijk
+PRJ-WINS-001,Winschoten Roofing Project,Portfolio Company Winschoten,8978226,3950419,44.0,Membrane install,0.3,85000,1,large,Winschoten
+PRJ-WINS-001,Winschoten Roofing Project,Portfolio Company Winschoten,8978226,3950419,44.0,Insulation complete,0.55,120000,3,large,Winschoten
+PRJ-WINS-001,Winschoten Roofing Project,Portfolio Company Winschoten,8978226,3950419,44.0,Handover,1.0,95000,5,large,Winschoten

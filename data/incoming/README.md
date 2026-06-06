@@ -15,23 +15,34 @@ The source files don't include location. Use this mapping (from the data owner):
 
 Location mapping is stored in [`opco_locations.json`](opco_locations.json).
 
+## File types → unified CSV stores
+
+Uploads are **not** dumped into one file. AI + GL rules route each file to the correct store:
+
+| Store | CSV file | Typical source files |
+|-------|----------|----------------------|
+| **Revenue & billing** | `unified_revenue.csv` | Exact `GB 8000*.xlsx`, Verkoop journals, GL 8xxx |
+| **Operating costs** | `unified_costs.csv` | GL 4xxx materials, 5xxx subcontractors |
+| **Overhead** | `unified_overhead.csv` | GL 9xxx bedrijfskosten |
+| **General ledger** | `unified_ledger.csv` | Mixed Yuki FinTransactions |
+| **Mixed P&L** | Split by GL row | Gilde `Altis dataset 1` monthly sheets |
+
+`unified_data.csv` is the **combined master** used by the forecast (auto-rebuilt after each merge).
+
 ## After dropping zip files
 
 ```bash
-cd /Users/milton/Hackathon/altis-cashflow
+cd altis-cashflow
 npm run data:pipeline
 npm run dev
 ```
 
-This will:
-1. Extract zips from this folder
-2. Parse all xlsx files with location tags
-3. Build weather.csv **per city** (Heeze, Brunssum, Andijk, Winschoten)
-4. Run forecast + update dashboards
+Or use the **Data Upload** UI — drop Excel/CSV and confirm the AI routing before merge.
 
 ## Files accepted
 
 - `*.zip` — auto-extracted to `extracted/`
 - Pre-extracted xlsx in `extracted/` also works
+- Direct `.xlsx` / `.csv` via upload UI
 
 You do **not** need to rename files to `gilde_export.csv` etc.

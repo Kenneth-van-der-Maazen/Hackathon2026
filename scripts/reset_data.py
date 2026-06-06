@@ -16,6 +16,8 @@ PUBLIC = ROOT / "public" / "data"
 RAW = ROOT / "data" / "raw"
 UPLOADS = ROOT / "data" / "uploads"
 
+from data_stores import DATA_STORES
+
 UNIFIED_HEADERS = [
     "date",
     "gl_account",
@@ -100,6 +102,8 @@ def main() -> int:
     print("Resetting Altis central database and upload staging…")
 
     write_csv_headers(OUT / "unified_data.csv", UNIFIED_HEADERS)
+    for meta in DATA_STORES.values():
+        write_csv_headers(OUT / meta["file"], UNIFIED_HEADERS)
     write_csv_headers(OUT / "gl_mapping.csv", GL_MAP_HEADERS)
     write_csv_headers(RAW / "gl_account_mapping.csv", GL_HEADERS)
     write_csv_headers(RAW / "projects_wip.csv", WIP_HEADERS)
@@ -111,9 +115,12 @@ def main() -> int:
     clear_raw_exports()
     clear_uploads()
 
-    for name in ("unified_data.csv", "gl_mapping.csv", "data_notes.txt"):
-        PUBLIC.mkdir(parents=True, exist_ok=True)
-        (PUBLIC / name).write_text((OUT / name).read_text(encoding="utf-8"), encoding="utf-8")
+    publish = ["unified_data.csv", "gl_mapping.csv", "data_notes.txt", *[m["file"] for m in DATA_STORES.values()]]
+    for name in publish:
+        src = OUT / name
+        if src.exists():
+            PUBLIC.mkdir(parents=True, exist_ok=True)
+            (PUBLIC / name).write_text(src.read_text(encoding="utf-8"), encoding="utf-8")
 
     forecast_script = ROOT / "scripts" / "forecast.py"
     py = ROOT / ".venv" / "bin" / "python"

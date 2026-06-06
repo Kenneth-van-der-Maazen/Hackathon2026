@@ -1,1 +1,12 @@
 gl_account,category,status
+8000,billing,mapped
+8001,billing,mapped
+8002,billing,mapped
+8005,billing,mapped
+9000,overhead,mapped
+80000,billing,mapped
+80020,billing,mapped
+001 - Kas,payment_lag,mapped
+008 - MMEM,overhead,mapped
+006 - Verkoop,payment_lag,mapped
+60 - Verkoopboek Gilde,payment_lag,mapped

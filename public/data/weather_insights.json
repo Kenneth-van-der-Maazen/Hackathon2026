@@ -1,16 +1,17 @@
 {
-  "fetchedAt": "2026-06-06T11:49:41",
+  "fetchedAt": "2026-06-06T12:56:22",
   "source": "Open-Meteo",
   "timezone": "Europe/Amsterdam",
   "horizonWeeks": 13,
   "weekStart": "2026-06-01",
-  "summary": "Real weather for 4 opco locations \u2014 17 total stoppage days in 13-week window",
+  "summary": "Real weather for 4 opco locations \u2014 18 total stoppage days in 13-week window",
   "topHighlights": [
-    "Heeze W1: 27mm rain, 3 work stoppage days \u2014 milestone billing at risk",
-    "Brunssum W1: 23mm rain, 3 work stoppage days \u2014 milestone billing at risk",
+    "Heeze W1: 28mm rain, 3 work stoppage days \u2014 milestone billing at risk",
+    "Heeze W2: 2 heavy-rain days (18mm total)",
+    "Brunssum W1: 25mm rain, 3 work stoppage days \u2014 milestone billing at risk",
+    "Andijk W1: 2 heavy-rain days (25mm total)",
     "Andijk W2: 30mm rain, 3 work stoppage days \u2014 milestone billing at risk",
-    "Winschoten W1: 27mm rain, 3 work stoppage days \u2014 milestone billing at risk",
-    "Winschoten W2: 36mm rain, 3 work stoppage days \u2014 milestone billing at risk"
+    "Winschoten W1: 2 heavy-rain days (25mm total)"
   ],
   "cities": [
     {
@@ -23,7 +24,7 @@
           "week": 1,
           "label": "W1",
           "weekStart": "2026-06-01",
-          "rainfallMm": 27.3,
+          "rainfallMm": 28.1,
           "tempMinC": 9.2,
           "tempMaxC": 23.0,
           "rainDays": 3,
@@ -36,13 +37,13 @@
           "week": 2,
           "label": "W2",
           "weekStart": "2026-06-08",
-          "rainfallMm": 16.2,
+          "rainfallMm": 17.8,
           "tempMinC": 8.7,
-          "tempMaxC": 22.3,
-          "rainDays": 1,
+          "tempMaxC": 21.1,
+          "rainDays": 2,
           "frostDays": 0,
-          "stoppageDays": 1,
-          "delayDays": 1,
+          "stoppageDays": 2,
+          "delayDays": 2,
           "source": "open-meteo"
         },
         {
@@ -190,10 +191,11 @@
         }
       ],
       "highlights": [
-        "Heeze W1: 27mm rain, 3 work stoppage days \u2014 milestone billing at risk"
+        "Heeze W1: 28mm rain, 3 work stoppage days \u2014 milestone billing at risk",
+        "Heeze W2: 2 heavy-rain days (18mm total)"
       ],
       "worstWeek": "W1",
-      "totalStoppageDays": 4,
+      "totalStoppageDays": 5,
       "transactionMatches": [
         {
           "date": "2026-05-13",
@@ -319,7 +321,7 @@
           "week": 1,
           "label": "W1",
           "weekStart": "2026-06-01",
-          "rainfallMm": 22.6,
+          "rainfallMm": 25.1,
           "tempMinC": 11.0,
           "tempMaxC": 24.5,
           "rainDays": 3,
@@ -332,7 +334,7 @@
           "week": 2,
           "label": "W2",
           "weekStart": "2026-06-08",
-          "rainfallMm": 17.2,
+          "rainfallMm": 16.3,
           "tempMinC": 8.9,
           "tempMaxC": 21.9,
           "rainDays": 0,
@@ -486,7 +488,7 @@
         }
       ],
       "highlights": [
-        "Brunssum W1: 23mm rain, 3 work stoppage days \u2014 milestone billing at risk"
+        "Brunssum W1: 25mm rain, 3 work stoppage days \u2014 milestone billing at risk"
       ],
       "worstWeek": "W1",
       "totalStoppageDays": 3,
@@ -615,22 +617,22 @@
           "week": 1,
           "label": "W1",
           "weekStart": "2026-06-01",
-          "rainfallMm": 21.2,
+          "rainfallMm": 25.0,
           "tempMinC": 13.2,
           "tempMaxC": 22.8,
-          "rainDays": 1,
+          "rainDays": 2,
           "frostDays": 0,
-          "stoppageDays": 1,
-          "delayDays": 1,
+          "stoppageDays": 2,
+          "delayDays": 2,
           "source": "open-meteo"
         },
         {
           "week": 2,
           "label": "W2",
           "weekStart": "2026-06-08",
-          "rainfallMm": 30.4,
+          "rainfallMm": 30.1,
           "tempMinC": 10.2,
-          "tempMaxC": 20.7,
+          "tempMaxC": 21.1,
           "rainDays": 3,
           "frostDays": 0,
           "stoppageDays": 3,
@@ -782,10 +784,11 @@
         }
       ],
       "highlights": [
+        "Andijk W1: 2 heavy-rain days (25mm total)",
         "Andijk W2: 30mm rain, 3 work stoppage days \u2014 milestone billing at risk"
       ],
       "worstWeek": "W2",
-      "totalStoppageDays": 4,
+      "totalStoppageDays": 5,
       "transactionMatches": []
     },
     {
@@ -798,22 +801,22 @@
           "week": 1,
           "label": "W1",
           "weekStart": "2026-06-01",
-          "rainfallMm": 26.6,
+          "rainfallMm": 24.7,
           "tempMinC": 11.6,
           "tempMaxC": 24.8,
-          "rainDays": 3,
+          "rainDays": 2,
           "frostDays": 0,
-          "stoppageDays": 3,
-          "delayDays": 3,
+          "stoppageDays": 2,
+          "delayDays": 2,
           "source": "open-meteo"
         },
         {
           "week": 2,
           "label": "W2",
           "weekStart": "2026-06-08",
-          "rainfallMm": 36.4,
+          "rainfallMm": 36.3,
           "tempMinC": 8.9,
-          "tempMaxC": 21.3,
+          "tempMaxC": 21.2,
           "rainDays": 3,
           "frostDays": 0,
           "stoppageDays": 3,
@@ -965,11 +968,11 @@
         }
       ],
       "highlights": [
-        "Winschoten W1: 27mm rain, 3 work stoppage days \u2014 milestone billing at risk",
+        "Winschoten W1: 2 heavy-rain days (25mm total)",
         "Winschoten W2: 36mm rain, 3 work stoppage days \u2014 milestone billing at risk"
       ],
-      "worstWeek": "W1",
-      "totalStoppageDays": 6,
+      "worstWeek": "W2",
+      "totalStoppageDays": 5,
       "transactionMatches": []
     }
   ]

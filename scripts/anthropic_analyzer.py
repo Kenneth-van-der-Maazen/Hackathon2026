@@ -13,7 +13,9 @@ Analyze this accounting export and return JSON only (no markdown fences).
 
 {
   "summary": "2-4 sentences in plain English explaining what this file contains, which company/opco it likely belongs to, date range, and whether it looks like transactions, WIP, or P&L",
-  "data_type": "transactions|wip|pl|mixed|unknown",
+  "data_type": "transactions|wip|pl|mixed|revenue|costs|overhead|unknown",
+  "target_store": "revenue|costs|overhead|ledger|mixed",
+  "store_reason": "One sentence: why this file belongs in that store (e.g. GB 8000 revenue export, Yuki mixed GL journal)",
   "detected_system": "Gilde|Yuki|Exact|Snelstart|Unknown",
   "system_confidence": 0.0-1.0,
   "recommended_opco": "string or null",
@@ -40,6 +42,13 @@ Analyze this accounting export and return JSON only (no markdown fences).
 }
 
 GL categories: materials (4xxx), subcontractors (5xxx), billing (8xxx), overhead (9xxx), payment_lag, unmapped.
+
+Store routing (Dutch roofing portfolio):
+- revenue: GB 8000/8001/8002, Omzet, Verkoop, sales invoices
+- costs: GL 4xxx materials, 5xxx subcontractors
+- overhead: GL 9xxx bedrijfskosten
+- ledger: mixed Yuki FinTransactions or unknown journals
+- mixed: P&L sheets (Gilde monthly) or file spans multiple GL types — split by GL on merge
 """
 
 
@@ -125,6 +134,8 @@ def to_enhancement(result: dict[str, Any]) -> dict[str, Any]:
         "ai_briefing": {
             "summary": result.get("summary", ""),
             "dataType": result.get("data_type", "unknown"),
+            "targetStore": result.get("target_store"),
+            "storeReason": result.get("store_reason", ""),
             "recommendedOpco": result.get("recommended_opco"),
             "recommendedCity": result.get("recommended_city"),
             "dateRange": result.get("date_range"),

@@ -24,10 +24,16 @@ import {
 } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { Separator } from "@/components/ui/separator";
-import type { GlCategory, UploadAnalysis } from "../types/upload";
-import { GL_CATEGORY_LABELS, UNIFIED_FIELDS } from "../types/upload";
+import type { DuplicateCheck, GlCategory, StoreRouting, UploadAnalysis } from "../types/upload";
+import { GL_CATEGORY_LABELS, STORE_LABELS, UNIFIED_FIELDS } from "../types/upload";
 
-type Step = "upload" | "briefing" | "review" | "done";
+type Step = "upload" | "briefing" | "review" | "merging" | "done";
+
+const MERGE_STAGES = [
+  "Validating row mappings…",
+  "Writing to central database…",
+  "Refreshing 13-week forecast…",
+] as const;
 
 const GL_OPTIONS: GlCategory[] = [
   "materials",
@@ -42,6 +48,7 @@ const STEPS: { id: Step; label: string }[] = [
   { id: "upload", label: "Upload" },
   { id: "briefing", label: "AI briefing" },
   { id: "review", label: "Technical review" },
+  { id: "merging", label: "Merging" },
   { id: "done", label: "Merged" },
 ];
 
@@ -53,7 +60,13 @@ export function DataUploadPage() {
   const [city, setCity] = useState("");
   const [sourceSystem, setSourceSystem] = useState("");
   const [useAi, setUseAi] = useState(true);
-  const [confirmed, setConfirmed] = useState<{ rowsAdded: number; totalRows: number } | null>(null);
+  const [confirmed, setConfirmed] = useState<{
+    rowsAdded: number;
+    totalRows: number;
+    rowsAddedByStore?: Record<string, number>;
+  } | null>(null);
+  const [mergeProgress, setMergeProgress] = useState(0);
+  const [mergeStage, setMergeStage] = useState<string>(MERGE_STAGES[0]);
   const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -124,16 +137,42 @@ export function DataUploadPage() {
   }
 
   async function handleConfirm() {
-    if (!analysis) return;
-    const result = await confirmUpload(analysis.uploadId, {
-      columnMapping: analysis.columnMapping,
-      glSuggestions: analysis.glSuggestions,
-      opco: opco || undefined,
-      city: city || undefined,
-      sourceSystem: sourceSystem || undefined,
-    });
-    setConfirmed({ rowsAdded: result.rowsAdded, totalRows: result.totalRows });
-    setStep("done");
+    if (!analysis || analysis.duplicateCheck?.blockMerge) return;
+
+    setStep("merging");
+    setMergeProgress(8);
+    setMergeStage(MERGE_STAGES[0]);
+
+    const progressTimer = window.setInterval(() => {
+      setMergeProgress((p) => (p >= 88 ? p : p + 3));
+    }, 160);
+    const stage1 = window.setTimeout(() => setMergeStage(MERGE_STAGES[1]), 700);
+    const stage2 = window.setTimeout(() => setMergeStage(MERGE_STAGES[2]), 1500);
+
+    try {
+      const result = await confirmUpload(analysis.uploadId, {
+        columnMapping: analysis.columnMapping,
+        glSuggestions: analysis.glSuggestions,
+        opco: opco || undefined,
+        city: city || undefined,
+        sourceSystem: sourceSystem || undefined,
+      });
+      setMergeProgress(100);
+      setMergeStage("Merge complete");
+      await new Promise((r) => window.setTimeout(r, 550));
+      setConfirmed({
+        rowsAdded: result.rowsAdded,
+        totalRows: result.totalRows,
+        rowsAddedByStore: result.rowsAddedByStore,
+      });
+      setStep("done");
+    } catch {
+      setStep("review");
+    } finally {
+      window.clearInterval(progressTimer);
+      window.clearTimeout(stage1);
+      window.clearTimeout(stage2);
+    }
   }
 
   const activeStepIndex = STEPS.findIndex((s) => s.id === step);
@@ -172,6 +211,12 @@ export function DataUploadPage() {
         <Card className="py-0 ring-1 ring-border/60">
           <CardContent className="flex flex-wrap divide-x divide-border-strong p-0">
             <Stat label="Central database rows" value={stats.totalRows.toLocaleString()} />
+            {stats.stores &&
+              Object.entries(stats.stores)
+                .filter(([, s]) => s.rowCount > 0)
+                .map(([id, s]) => (
+                  <Stat key={id} label={s.label} value={s.rowCount.toLocaleString()} />
+                ))}
             <Stat label="Systems" value={String(stats.systems.length)} />
             <Stat label="Opcos" value={String(stats.opcos.length)} />
             <Stat label="Unmapped GL" value={String(stats.unmappedGl)} warn={stats.unmappedGl > 0} />
@@ -312,6 +357,8 @@ export function DataUploadPage() {
         <AiBriefingCard
           analysis={analysis}
           briefing={analysis.aiBriefing}
+          duplicateCheck={analysis.duplicateCheck}
+          storeRouting={analysis.storeRouting}
           onContinue={() => setStep("review")}
           onReupload={() => {
             setAnalysis(null);
@@ -326,39 +373,36 @@ export function DataUploadPage() {
           opco={opco}
           city={city}
           sourceSystem={sourceSystem}
+          duplicateCheck={analysis.duplicateCheck}
+          storeRouting={analysis.storeRouting}
           onMappingChange={updateMapping}
           onGlChange={updateGl}
           onConfirm={handleConfirm}
           onBack={() => setStep(analysis.aiBriefing ? "briefing" : "upload")}
+          onReupload={() => {
+            setAnalysis(null);
+            setStep("upload");
+          }}
           loading={loading}
         />
       )}
 
+      {step === "merging" && (
+        <MergeOverlay progress={mergeProgress} stage={mergeStage} filename={analysis?.filename} />
+      )}
+
       {step === "done" && confirmed && (
-        <Card className="border-emerald-500/30 bg-emerald-500/5">
-          <CardContent className="flex items-start gap-3 py-6">
-            <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-500" />
-            <div>
-              <p className="font-medium text-emerald-400">Pushed to central database</p>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Added {confirmed.rowsAdded} rows — unified dataset now has {confirmed.totalRows}{" "}
-                rows. Forecast refreshed.
-              </p>
-              <Button
-                variant="outline"
-                size="sm"
-                className="mt-4"
-                onClick={() => {
-                  setAnalysis(null);
-                  setConfirmed(null);
-                  setStep("upload");
-                }}
-              >
-                Upload another file
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
+        <MergeSuccessCard
+          rowsAdded={confirmed.rowsAdded}
+          totalRows={confirmed.totalRows}
+          rowsAddedByStore={confirmed.rowsAddedByStore}
+          onUploadAnother={() => {
+            setAnalysis(null);
+            setConfirmed(null);
+            setMergeProgress(0);
+            setStep("upload");
+          }}
+        />
       )}
     </div>
   );
@@ -411,14 +455,183 @@ function StepIndicator({
   );
 }
 
+function StoreRoutingBanner({ routing }: { routing: StoreRouting }) {
+  return (
+    <div className="rounded-lg border border-primary/25 bg-primary/5 px-4 py-4">
+      <div className="flex flex-wrap items-center gap-2">
+        <Database className="h-4 w-4 text-primary" />
+        <p className="text-sm font-medium">Target database</p>
+        <Badge variant="secondary">
+          {routing.mixed
+            ? STORE_LABELS.mixed
+            : STORE_LABELS[routing.targetStore] ?? routing.targetStore}
+        </Badge>
+      </div>
+      <p className="mt-2 text-sm text-muted-foreground">{routing.reason}</p>
+      {routing.stores.length > 0 && (
+        <div className="mt-3 flex flex-wrap gap-2">
+          {routing.stores.map((s) => (
+            <div
+              key={s.id}
+              className="rounded-md border border-border/60 bg-background/60 px-2.5 py-1.5 text-xs"
+            >
+              <span className="font-medium">{s.label}</span>
+              <span className="ml-2 font-mono text-muted-foreground">{s.file}</span>
+              <span className="ml-2 tabular-nums text-primary">{s.rowCount.toLocaleString()} rows</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DuplicateBanner({ check }: { check: DuplicateCheck }) {
+  if (check.status === "all_new") return null;
+
+  const isBlocked = check.blockMerge;
+
+  return (
+    <div
+      role="alert"
+      className={cn(
+        "rounded-lg border px-4 py-4",
+        isBlocked
+          ? "border-destructive/40 bg-destructive/10"
+          : "border-amber-500/35 bg-amber-500/8",
+      )}
+    >
+      <div className="flex items-start gap-3">
+        <AlertTriangle
+          className={cn("mt-0.5 h-5 w-5 shrink-0", isBlocked ? "text-destructive" : "text-amber-400")}
+        />
+        <div>
+          <p className={cn("font-medium", isBlocked ? "text-destructive" : "text-amber-400")}>
+            {isBlocked ? "Already in central database" : "Partial overlap detected"}
+          </p>
+          <p className="mt-1 text-sm text-muted-foreground">{check.message}</p>
+          <div className="mt-3 flex flex-wrap gap-4 text-xs">
+            <span>
+              <span className="text-muted-foreground">In file: </span>
+              <span className="font-medium tabular-nums">{check.totalRows.toLocaleString()}</span>
+            </span>
+            <span>
+              <span className="text-muted-foreground">Duplicates: </span>
+              <span className="font-medium tabular-nums text-destructive">
+                {check.duplicateRows.toLocaleString()}
+              </span>
+            </span>
+            <span>
+              <span className="text-muted-foreground">New rows: </span>
+              <span className="font-medium tabular-nums text-emerald-400">
+                {check.newRows.toLocaleString()}
+              </span>
+            </span>
+          </div>
+          {isBlocked && (
+            <p className="mt-2 text-xs text-destructive/90">
+              Merge is blocked. Upload a different file or new data not yet in the system.
+            </p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MergeOverlay({
+  progress,
+  stage,
+  filename,
+}: {
+  progress: number;
+  stage: string;
+  filename?: string;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 px-4 backdrop-blur-sm">
+      <Card className="w-full max-w-md animate-fade-up ring-1 ring-border/60">
+        <CardContent className="py-8">
+          <div className="flex flex-col items-center text-center">
+            <div className="relative mb-6 flex h-16 w-16 items-center justify-center">
+              <Loader2 className="h-12 w-12 animate-spin text-primary" />
+              <Database className="absolute h-5 w-5 text-primary/80" />
+            </div>
+            <p className="text-lg font-medium">Merging into central database</p>
+            {filename && <p className="mt-1 text-sm text-muted-foreground">{filename}</p>}
+            <p className="mt-4 text-sm text-muted-foreground animate-merge-progress">{stage}</p>
+            <div className="mt-5 h-2 w-full overflow-hidden rounded-full bg-muted">
+              <div
+                className="h-full rounded-full bg-primary transition-all duration-300 ease-out"
+                style={{ width: `${progress}%` }}
+              />
+            </div>
+            <p className="mt-2 font-mono text-xs text-muted-foreground">{progress}%</p>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function MergeSuccessCard({
+  rowsAdded,
+  totalRows,
+  rowsAddedByStore,
+  onUploadAnother,
+}: {
+  rowsAdded: number;
+  totalRows: number;
+  rowsAddedByStore?: Record<string, number>;
+  onUploadAnother: () => void;
+}) {
+  const storeEntries = rowsAddedByStore
+    ? Object.entries(rowsAddedByStore).filter(([, n]) => n > 0)
+    : [];
+
+  return (
+    <Card className="animate-merge-success border-emerald-500/35 bg-emerald-500/8 ring-1 ring-emerald-500/20">
+      <CardContent className="flex flex-col items-center py-10 text-center">
+        <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-emerald-500/15 ring-2 ring-emerald-500/30">
+          <CheckCircle2 className="h-9 w-9 text-emerald-400" />
+        </div>
+        <p className="text-xl font-semibold text-emerald-400">Successfully merged</p>
+        <p className="mt-2 max-w-sm text-sm text-muted-foreground">
+          Added{" "}
+          <span className="font-medium tabular-nums text-foreground">{rowsAdded.toLocaleString()}</span>{" "}
+          new rows. Central database total:{" "}
+          <span className="font-medium tabular-nums text-foreground">{totalRows.toLocaleString()}</span>{" "}
+          rows. Forecast refreshed.
+        </p>
+        {storeEntries.length > 0 && (
+          <div className="mt-4 flex flex-wrap justify-center gap-2">
+            {storeEntries.map(([id, count]) => (
+              <Badge key={id} variant="outline" className="gap-1 tabular-nums">
+                {STORE_LABELS[id] ?? id}: +{count.toLocaleString()}
+              </Badge>
+            ))}
+          </div>
+        )}
+        <Button variant="outline" className="mt-6" onClick={onUploadAnother}>
+          Upload another file
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
 function AiBriefingCard({
   analysis,
   briefing,
+  duplicateCheck,
+  storeRouting,
   onContinue,
   onReupload,
 }: {
   analysis: UploadAnalysis;
   briefing: NonNullable<UploadAnalysis["aiBriefing"]>;
+  duplicateCheck?: DuplicateCheck;
+  storeRouting?: StoreRouting;
   onContinue: () => void;
   onReupload: () => void;
 }) {
@@ -447,6 +660,9 @@ function AiBriefingCard({
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
+        {storeRouting && <StoreRoutingBanner routing={storeRouting} />}
+        {duplicateCheck && <DuplicateBanner check={duplicateCheck} />}
+
         <div>
           <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
             What this data is about
@@ -509,7 +725,10 @@ function AiBriefingCard({
         </div>
       </CardContent>
       <CardFooter className="flex flex-wrap gap-3">
-        <Button onClick={onContinue} disabled={briefing.mergeRecommendation === "reject"}>
+        <Button
+          onClick={onContinue}
+          disabled={briefing.mergeRecommendation === "reject" || duplicateCheck?.blockMerge}
+        >
           I understand — review mappings
           <ChevronRight className="h-4 w-4" />
         </Button>
@@ -526,28 +745,53 @@ function AnalysisReview({
   opco,
   city,
   sourceSystem,
+  duplicateCheck,
+  storeRouting,
   onMappingChange,
   onGlChange,
   onConfirm,
   onBack,
+  onReupload,
   loading,
 }: {
   analysis: UploadAnalysis;
   opco: string;
   city: string;
   sourceSystem: string;
+  duplicateCheck?: DuplicateCheck;
+  storeRouting?: StoreRouting;
   onMappingChange: (field: keyof UploadAnalysis["columnMapping"], value: string) => void;
   onGlChange: (index: number, category: GlCategory) => void;
   onConfirm: () => void;
   onBack: () => void;
+  onReupload: () => void;
   loading: boolean;
 }) {
   const unmappedPending = analysis.glSuggestions.filter(
     (s) => s.suggestedCategory === "unmapped" && s.status !== "rejected",
   );
+  const mergeBlocked = duplicateCheck?.blockMerge ?? false;
 
   return (
     <div className="flex flex-col gap-5">
+      {storeRouting && <StoreRoutingBanner routing={storeRouting} />}
+      {duplicateCheck && <DuplicateBanner check={duplicateCheck} />}
+
+      {!analysis.aiBriefing && mergeBlocked && (
+        <Card className="ring-1 ring-border/60">
+          <CardContent className="py-6 text-center">
+            <p className="text-sm text-muted-foreground">
+              This file cannot be merged because every row already exists in the central database.
+            </p>
+            <Button variant="outline" className="mt-4" onClick={onReupload}>
+              Upload a different file
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {!mergeBlocked && (
+        <>
       <Card size="sm">
         <CardHeader>
           <CardTitle className="text-base">Technical review</CardTitle>
@@ -679,7 +923,7 @@ function AnalysisReview({
           Back
         </Button>
         <Button
-          disabled={loading || unmappedPending.length > 0}
+          disabled={loading || unmappedPending.length > 0 || mergeBlocked}
           onClick={onConfirm}
           className="gap-2"
         >
@@ -692,15 +936,25 @@ function AnalysisReview({
             <>
               <Database className="h-4 w-4" />
               Push to central database
+              {duplicateCheck && duplicateCheck.newRows > 0 && duplicateCheck.newRows < duplicateCheck.totalRows && (
+                <span className="text-primary-foreground/80">
+                  ({duplicateCheck.newRows.toLocaleString()} new)
+                </span>
+              )}
             </>
           )}
         </Button>
-        {unmappedPending.length > 0 && (
+        {mergeBlocked && (
+          <p className="text-sm text-destructive">Duplicate file — merge not allowed.</p>
+        )}
+        {!mergeBlocked && unmappedPending.length > 0 && (
           <p className="text-sm text-amber-400">
             Assign categories to {unmappedPending.length} unmapped GL account(s) first.
           </p>
         )}
       </div>
+        </>
+      )}
     </div>
   );
 }
