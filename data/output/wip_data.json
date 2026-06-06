@@ -1,1 +1,62 @@
-[]
+[
+  {
+    "projectId": "PRJ-HEEZ-001",
+    "project": "Heeze Roofing Project",
+    "opco": "Portfolio Company Heeze",
+    "contractValue": 400000,
+    "wipToDate": 190000,
+    "pctComplete": 100.0,
+    "nextMilestone": "Handover",
+    "status": "On Track",
+    "weatherRisk": false,
+    "riskReason": "",
+    "materialsCommitted": 33250,
+    "subcontractorWeek": 5,
+    "actionNeeded": ""
+  },
+  {
+    "projectId": "PRJ-BRUN-001",
+    "project": "Brunssum Roofing Project",
+    "opco": "Dakdekkersbedrijf Peter Ummels",
+    "contractValue": 400000,
+    "wipToDate": 190000,
+    "pctComplete": 100.0,
+    "nextMilestone": "Handover",
+    "status": "On Track",
+    "weatherRisk": false,
+    "riskReason": "",
+    "materialsCommitted": 33250,
+    "subcontractorWeek": 6,
+    "actionNeeded": ""
+  },
+  {
+    "projectId": "PRJ-ANDI-001",
+    "project": "Andijk Roofing Project",
+    "opco": "Portfolio Company Andijk",
+    "contractValue": 400000,
+    "wipToDate": 190000,
+    "pctComplete": 100.0,
+    "nextMilestone": "Handover",
+    "status": "On Track",
+    "weatherRisk": false,
+    "riskReason": "",
+    "materialsCommitted": 33250,
+    "subcontractorWeek": 7,
+    "actionNeeded": ""
+  },
+  {
+    "projectId": "PRJ-WINS-001",
+    "project": "Winschoten Roofing Project",
+    "opco": "Portfolio Company Winschoten",
+    "contractValue": 400000,
+    "wipToDate": 190000,
+    "pctComplete": 100.0,
+    "nextMilestone": "Handover",
+    "status": "On Track",
+    "weatherRisk": false,
+    "riskReason": "",
+    "materialsCommitted": 33250,
+    "subcontractorWeek": 5,
+    "actionNeeded": ""
+  }
+]

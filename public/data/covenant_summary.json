@@ -4,9 +4,9 @@
   "interestCoverageMinimum": 2.0,
   "headroomByScenario": {
     "base": 500000,
-    "wet": 425000,
+    "wet": 419220,
     "dry": 540000
   },
-  "wetQuarterEarlyWeeksWorse": false,
-  "dryQuarterEarlyWeeksBetter": false
+  "wetQuarterEarlyWeeksWorse": true,
+  "dryQuarterEarlyWeeksBetter": true
 }

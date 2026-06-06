@@ -5,6 +5,8 @@ export type MergeRecommendation = "ready" | "review_required" | "reject";
 export interface AiBriefing {
   summary: string;
   dataType: string;
+  targetStore?: string | null;
+  storeReason?: string;
   recommendedOpco: string | null;
   recommendedCity: string | null;
   dateRange?: { start: string | null; end: string | null };
@@ -42,6 +44,29 @@ export interface GlSuggestionDto {
   status: "pending" | "approved" | "rejected";
 }
 
+export interface StoreRouting {
+  targetStore: string;
+  mixed: boolean;
+  reason: string;
+  rowCountsByStore: Record<string, number>;
+  activeStores: string[];
+  filenameHint?: string | null;
+  stores: { id: string; label: string; file: string; rowCount: number }[];
+}
+
+export interface DuplicateCheck {
+  totalRows: number;
+  duplicateRows: number;
+  newRows: number;
+  duplicatePercent: number;
+  blockMerge: boolean;
+  status: "empty" | "all_new" | "partial_duplicate" | "all_duplicate";
+  message: string;
+  storeRouting?: StoreRouting;
+  newRowsByStore?: Record<string, number>;
+  duplicateRowsByStore?: Record<string, number>;
+}
+
 export interface UploadAnalysis {
   uploadId: string;
   filename: string;
@@ -60,9 +85,17 @@ export interface UploadAnalysis {
   aiBriefing?: AiBriefing;
   fileType?: "csv" | "xlsx";
   sheetName?: string | null;
+  duplicateCheck?: DuplicateCheck;
+  storeRouting?: StoreRouting;
   status?: UploadStatus;
   rowsAdded?: number;
   totalRows?: number;
+}
+
+export interface StoreStat {
+  label: string;
+  file: string;
+  rowCount: number;
 }
 
 export interface UnifiedStats {
@@ -71,7 +104,16 @@ export interface UnifiedStats {
   systems: string[];
   cities: string[];
   unmappedGl: number;
+  stores?: Record<string, StoreStat>;
 }
+
+export const STORE_LABELS: Record<string, string> = {
+  revenue: "Revenue & billing",
+  costs: "Operating costs",
+  overhead: "Overhead",
+  ledger: "General ledger",
+  mixed: "Multiple stores (split by GL)",
+};
 
 export const GL_CATEGORY_LABELS: Record<GlCategory, string> = {
   materials: "Materials outflows",

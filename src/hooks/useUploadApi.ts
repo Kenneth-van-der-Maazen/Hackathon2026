@@ -82,7 +82,15 @@ export function useUploadApi() {
         }),
       });
       const data = await r.json();
-      if (!r.ok) throw new Error(data.detail ?? "Confirm failed");
+      if (!r.ok) {
+        const detail =
+          typeof data.detail === "string"
+            ? data.detail
+            : Array.isArray(data.detail)
+              ? data.detail.map((d: { msg?: string }) => d.msg).filter(Boolean).join(", ")
+              : "Confirm failed";
+        throw new Error(detail || "Confirm failed");
+      }
       await refreshStats();
       return data;
     } catch (e) {
