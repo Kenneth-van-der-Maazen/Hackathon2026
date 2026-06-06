@@ -61,10 +61,17 @@ def clear_uploads() -> None:
 
 
 def clear_raw_exports() -> None:
-    for name in ("gilde_export.csv", "yuki_export.csv", "exact_export.csv"):
+    for name in ("gilde_export.csv", "yuki_export.csv", "exact_export.csv", "weather.csv", "weather_daily.csv"):
         path = RAW / name
         if path.exists():
             path.unlink()
+
+
+def clear_crew_notifications() -> None:
+    payload = "[]\n"
+    for folder in (OUT, PUBLIC):
+        folder.mkdir(parents=True, exist_ok=True)
+        (folder / "crew_notifications.json").write_text(payload, encoding="utf-8")
 
 
 def write_empty_json_outputs() -> None:
@@ -114,6 +121,7 @@ def main() -> int:
 
     clear_raw_exports()
     clear_uploads()
+    clear_crew_notifications()
 
     publish = ["unified_data.csv", "gl_mapping.csv", "data_notes.txt", *[m["file"] for m in DATA_STORES.values()]]
     for name in publish:

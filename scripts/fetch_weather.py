@@ -32,6 +32,24 @@ def week_start(d: date | None = None) -> date:
     return d - timedelta(days=d.weekday())
 
 
+def forecast_window_start() -> date:
+    """Align weather weeks with the 13-week forecast window from unified_data."""
+    unified_path = OUT / "unified_data.csv"
+    if unified_path.exists() and unified_path.stat().st_size > 50:
+        dates: list[date] = []
+        with unified_path.open(encoding="utf-8") as f:
+            for row in csv.DictReader(f):
+                try:
+                    dates.append(date.fromisoformat(str(row["date"])[:10]))
+                except ValueError:
+                    continue
+        if dates:
+            latest = max(dates)
+            fs = latest - timedelta(weeks=WEEKS - 1)
+            return fs - timedelta(days=fs.weekday())
+    return week_start()
+
+
 def load_locations() -> list[dict]:
     path = INCOMING / "opco_locations.json"
     if path.exists():
@@ -187,7 +205,7 @@ def match_transactions(city: str, daily: list[dict], unified_path: Path) -> list
     return matches[:8]
 
 
-def build_insights(locations: list[dict], city_data: dict[str, dict]) -> dict:
+def build_insights(locations: list[dict], city_data: dict[str, dict], start: date) -> dict:
     all_highlights = []
     cities_out = []
 
@@ -216,10 +234,11 @@ def build_insights(locations: list[dict], city_data: dict[str, dict]) -> dict:
         "source": "Open-Meteo",
         "timezone": TIMEZONE,
         "horizonWeeks": WEEKS,
-        "weekStart": week_start().isoformat(),
+        "weekStart": start.isoformat(),
         "summary": (
             f"Real weather for {len(cities_out)} opco locations — "
-            f"{sum(c['totalStoppageDays'] for c in cities_out)} total stoppage days in 13-week window"
+            f"{sum(c['totalStoppageDays'] for c in cities_out)} total stoppage days in next 13 weeks "
+            f"(from {start.isoformat()})"
         ),
         "topHighlights": all_highlights[:6],
         "cities": cities_out,
@@ -268,8 +287,26 @@ def write_outputs(
         w.writerow(["date", "city", "rainfall_mm", "temp_min_c", "temp_max_c", "stoppage", "is_stoppage"])
         w.writerows(daily_rows)
 
+    daily_json = {
+        "weekStart": start.isoformat(),
+        "horizonWeeks": WEEKS,
+        "days": [
+            {
+                "date": row[0].isoformat() if hasattr(row[0], "isoformat") else str(row[0]),
+                "city": row[1],
+                "rainfallMm": row[2],
+                "tempMinC": row[3],
+                "tempMaxC": row[4],
+                "stoppageReasons": [s for s in str(row[5]).split("|") if s],
+                "isStoppage": str(row[6]).lower() in ("true", "1"),
+            }
+            for row in daily_rows
+        ],
+    }
+
     for name, content in [
         ("weather_insights.json", json.dumps(insights, indent=2)),
+        ("weather_daily.json", json.dumps(daily_json, indent=2)),
     ]:
         (OUT / name).write_text(content, encoding="utf-8")
         (PUBLIC / name).write_text(content, encoding="utf-8")
@@ -305,7 +342,7 @@ def fetch_all_weather(locations: list[dict] | None = None) -> dict:
     if not city_data:
         raise RuntimeError("Could not fetch weather for any city")
 
-    insights = build_insights(locations, city_data)
+    insights = build_insights(locations, city_data, start)
     write_outputs(locations, city_data, insights, start)
     print(f"Weather written: {len(city_data)} cities, {insights['summary']}")
     return insights

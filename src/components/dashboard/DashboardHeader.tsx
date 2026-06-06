@@ -1,11 +1,13 @@
 import { Calendar, MoreHorizontal, SlidersHorizontal } from "lucide-react";
-import type { ScenarioId } from "../../types";
+import type { ForecastMeta, ScenarioId } from "../../types";
 import { SCENARIO_LABELS } from "../../types";
+import { forecastWindowLabel, forecastWindowTooltip } from "../../lib/forecastWindow";
 
 interface DashboardHeaderProps {
   scenario?: ScenarioId;
   onScenarioChange?: (s: ScenarioId) => void;
   lastUpdated: string;
+  forecastMeta?: ForecastMeta;
 }
 
 function greeting(): string {
@@ -15,13 +17,7 @@ function greeting(): string {
   return "Good evening";
 }
 
-export function DashboardHeader({ scenario, onScenarioChange, lastUpdated }: DashboardHeaderProps) {
-  const today = new Date();
-  const start = new Date(today);
-  start.setDate(today.getDate() - 7 * 12);
-  const fmt = (d: Date) =>
-    d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-
+export function DashboardHeader({ scenario, onScenarioChange, lastUpdated, forecastMeta }: DashboardHeaderProps) {
   return (
     <header className="mb-8 flex flex-wrap items-start justify-between gap-4 animate-fade-up">
       <div>
@@ -46,14 +42,15 @@ export function DashboardHeader({ scenario, onScenarioChange, lastUpdated }: Das
             ))}
           </select>
         )}
-        <button
-          type="button"
-          className="flex h-10 items-center gap-2 rounded-full border border-border bg-bg-elevated px-4 text-sm text-text-muted"
+        <div
+          title={forecastWindowTooltip(forecastMeta)}
+          aria-label={forecastWindowTooltip(forecastMeta)}
+          className="flex h-10 cursor-default items-center gap-2 rounded-full border border-border bg-bg-elevated px-4 text-sm text-text-muted"
         >
           <Calendar className="h-4 w-4" aria-hidden />
-          <span className="hidden sm:inline">{fmt(start)} – {fmt(today)}</span>
+          <span className="hidden sm:inline">{forecastWindowLabel(forecastMeta)}</span>
           <span className="sm:hidden">13 weeks</span>
-        </button>
+        </div>
         <button
           type="button"
           className="flex h-10 items-center gap-2 rounded-full border border-border bg-bg-elevated px-4 text-sm text-text-muted hover:text-white"

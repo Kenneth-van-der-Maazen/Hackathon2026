@@ -79,6 +79,12 @@ def row_key(date: str, gl: str, amount: float, project: str, source: str) -> str
 
 def parse_date(value: str) -> str:
     value = str(value).strip()
+    if not value:
+        raise ValueError("Empty date")
+    if " " in value:
+        value = value.split(" ")[0]
+    if "T" in value:
+        value = value.split("T")[0]
     for fmt in ("%Y-%m-%d", "%d-%m-%Y", "%d/%m/%Y", "%Y/%m/%d", "%d.%m.%Y"):
         try:
             return datetime.strptime(value, fmt).strftime("%Y-%m-%d")

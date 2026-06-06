@@ -5,6 +5,7 @@ import type {
   ScenarioId,
   TraceRecord,
   TraceSelection,
+  UnifiedTimeseries,
   WeatherInsights,
   WipProject,
 } from "../types";
@@ -15,11 +16,13 @@ interface Props {
   traces: TraceRecord[];
   weatherInsights: WeatherInsights | null;
   wip: WipProject[];
+  timeseries: UnifiedTimeseries | null;
   scenario: ScenarioId;
   onScenarioChange: (s: ScenarioId) => void;
   traceSelection: TraceSelection | null;
   onTraceSelect: (s: TraceSelection) => void;
   onTraceClose: () => void;
+  onForecastRebuilt?: () => Promise<void>;
 }
 
 export function CFODashboard(props: Props) {

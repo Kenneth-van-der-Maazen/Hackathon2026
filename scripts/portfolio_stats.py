@@ -74,6 +74,14 @@ def _data_quality(revenue_months: int, cost_months: int) -> str:
 
 
 def build_portfolio_stats(unified: list[dict], locations: list[dict]) -> dict:
+    if not unified:
+        return {
+            "source": "unified_data.csv",
+            "totalRows": 0,
+            "companies": [],
+            "generatedAt": datetime.utcnow().isoformat() + "Z",
+        }
+
     by_opco: dict[str, list[dict]] = defaultdict(list)
     for row in unified:
         key = row.get("opco") or row.get("city") or "Unknown"

@@ -2,6 +2,36 @@ export type UploadStatus = "pending" | "confirmed";
 
 export type MergeRecommendation = "ready" | "review_required" | "reject";
 
+export interface WorkbookSheetProfile {
+  name: string;
+  kind: string;
+  rowCount: number;
+  headers: string[];
+  dateRange?: { start: string | null; end: string | null };
+  yearBreakdown?: Record<string, number>;
+  opcoHint?: string | null;
+  skippedReason?: string | null;
+}
+
+export interface WorkbookProfile {
+  mergedSheets: string[];
+  sheetCount: number;
+  sheets: WorkbookSheetProfile[];
+  totalMergedRows: number;
+  yearBreakdown: Record<string, number>;
+  dateRange: { start: string | null; end: string | null };
+  opcoHint?: string | null;
+  cityHint?: string | null;
+}
+
+export interface DatasetProfile {
+  rowCount: number;
+  dateRange: { start: string | null; end: string | null };
+  yearBreakdown: Record<string, number>;
+  rowsBySheet: Record<string, number>;
+  hasDates: boolean;
+}
+
 export interface AiBriefing {
   summary: string;
   dataType: string;
@@ -10,6 +40,7 @@ export interface AiBriefing {
   recommendedOpco: string | null;
   recommendedCity: string | null;
   dateRange?: { start: string | null; end: string | null };
+  yearBreakdown?: Record<string, number>;
   qualityChecks: string[];
   mergeRecommendation: MergeRecommendation;
   controllerQuestion: string;
@@ -67,6 +98,15 @@ export interface DuplicateCheck {
   duplicateRowsByStore?: Record<string, number>;
 }
 
+export interface ScanSummary {
+  overallConfidence: number;
+  rowsScanned: number;
+  rowsValid: number;
+  mappingVerified: boolean;
+  duplicateStatus?: string;
+  trainedProfile: boolean;
+}
+
 export interface UploadAnalysis {
   uploadId: string;
   filename: string;
@@ -85,8 +125,16 @@ export interface UploadAnalysis {
   aiBriefing?: AiBriefing;
   fileType?: "csv" | "xlsx";
   sheetName?: string | null;
+  workbookProfile?: WorkbookProfile;
+  datasetProfile?: DatasetProfile;
   duplicateCheck?: DuplicateCheck;
   storeRouting?: StoreRouting;
+  companyMatch?: CompanyMatch | null;
+  ingestProfile?: IngestProfileSummary | null;
+  scanSummary?: ScanSummary;
+  suggestedContext?: { opco: string; city: string; sourceSystem: string };
+  needsDiscovery?: boolean;
+  discoveryReason?: string;
   status?: UploadStatus;
   rowsAdded?: number;
   totalRows?: number;
@@ -124,14 +172,98 @@ export const GL_CATEGORY_LABELS: Record<GlCategory, string> = {
   unmapped: "Unmapped — needs review",
 };
 
-export const UNIFIED_FIELDS: { key: keyof ColumnMappingDto; label: string; required?: boolean }[] = [
+export const FILE_COLUMN_FIELDS: { key: keyof ColumnMappingDto; label: string; required?: boolean }[] = [
   { key: "date", label: "Date", required: true },
   { key: "gl_account", label: "GL account" },
   { key: "amount", label: "Amount" },
   { key: "debit", label: "Debit" },
   { key: "credit", label: "Credit" },
   { key: "description", label: "Description" },
-  { key: "opco", label: "Operating company" },
-  { key: "project_id", label: "Project ID" },
-  { key: "city", label: "City / location" },
 ];
+
+/** @deprecated Use FILE_COLUMN_FIELDS — opco/city are set via company registry */
+export const UNIFIED_FIELDS = FILE_COLUMN_FIELDS;
+
+export interface PortfolioCompany {
+  opcoId: string;
+  opcoName: string;
+  city: string;
+  sourceSystem: string;
+  dataFolder?: string;
+  filenamePatterns?: string[];
+  notes?: string;
+  ingestProfile?: {
+    trained: boolean;
+    autoMerge: boolean;
+    formatName?: string;
+    parser?: string;
+    confidence?: number;
+    summary?: string;
+  } | null;
+}
+
+export interface IngestProfileSummary {
+  trained: boolean;
+  autoMerge: boolean;
+  formatName?: string | null;
+  parser?: string | null;
+  confidence?: number | null;
+}
+
+export interface IngestResult {
+  merged: boolean;
+  reason?: string;
+  uploadId?: string;
+  rowsAdded?: number;
+  rowsAddedByStore?: Record<string, number>;
+  totalRows?: number;
+  company?: CompanyMatch;
+  ingestProfile?: IngestProfileSummary | null;
+  analysis?: UploadAnalysis;
+  forecastRan?: boolean;
+  weatherRan?: boolean;
+  weatherError?: string;
+  warnings?: string[];
+  needsDiscovery?: boolean;
+  discoveryReason?: string;
+}
+
+export interface DiscoveryProposal {
+  opcoName: string;
+  city: string;
+  region?: string;
+  sourceSystem: string;
+  filenamePatterns: string[];
+  formatName?: string;
+  targetStore?: string;
+  parser?: string;
+  summary?: string;
+  qualityChecks?: string[];
+  columnMapping?: Record<string, string | null>;
+  confidence?: number;
+  notes?: string;
+}
+
+export interface DiscoveryResult {
+  status: "questions" | "proposal";
+  sessionId?: string;
+  filename?: string;
+  questions?: string[];
+  proposal?: DiscoveryProposal;
+  createPayload?: Record<string, unknown>;
+  aiUsed?: boolean;
+  aiAvailable?: boolean;
+  preview?: { detectedSystem?: string; headers?: string[] };
+}
+
+export interface CompanyMatch {
+  opcoId: string;
+  opcoName: string;
+  city: string;
+  sourceSystem: string;
+  projectId: string;
+  matchMethod: string;
+  matchedFile: string;
+  dataFolder?: string;
+  notes?: string;
+}

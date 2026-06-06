@@ -1,10 +1,13 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { CloudRain } from "lucide-react";
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
 import {
   BarChart,
   Bar,
   Cell,
+  ComposedChart,
+  Line,
   XAxis,
   YAxis,
   Tooltip,
@@ -15,6 +18,12 @@ import {
   getMonthlyRevenue,
   type SubsidiaryCompany,
 } from "../data/altisPortfolio";
+import {
+  getAnnualWeatherStats,
+  getMonthlyWeather,
+  portfolioWeatherComparison,
+  type WeatherHistoryFile,
+} from "@/lib/portfolioWeather";
 
 const YEARS = ["2023", "2024", "2025", "2026"];
 
@@ -51,6 +60,7 @@ export function PortfolioPage() {
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<SubsidiaryCompany | null>(null);
   const [chartYear, setChartYear] = useState("2025");
+  const [weatherHistory, setWeatherHistory] = useState<WeatherHistoryFile | null>(null);
 
   useEffect(() => {
     fetch("/data/portfolio_stats.json")
@@ -61,6 +71,11 @@ export function PortfolioPage() {
         }
       })
       .finally(() => setLoading(false));
+
+    fetch("/data/weather_history.json")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => setWeatherHistory(data))
+      .catch(() => setWeatherHistory(null));
   }, []);
 
   useEffect(() => {
@@ -131,6 +146,18 @@ export function PortfolioPage() {
     color: c.color,
   }));
 
+  const weatherComparison = useMemo(
+    () => portfolioWeatherComparison(weatherHistory, companies.map((c) => c.city), chartYear),
+    [weatherHistory, companies, chartYear],
+  );
+
+  const selectedWeather = selected
+    ? getAnnualWeatherStats(weatherHistory, selected.city, chartYear)
+    : null;
+  const selectedMonthlyWeather = selected
+    ? getMonthlyWeather(weatherHistory, selected.city, chartYear)
+    : [];
+
   return (
     <div className="flex flex-col gap-6">
       <div>
@@ -138,7 +165,7 @@ export function PortfolioPage() {
           Portfolio Revenue Map
         </h1>
         <p className="mt-1 text-sm text-text-muted">
-          Live data from unified database — click a marker or chip to drill down
+          Live data from unified database — revenue and Open-Meteo weather by location and year
         </p>
       </div>
 
@@ -310,6 +337,89 @@ export function PortfolioPage() {
                   </BarChart>
                 </ResponsiveContainer>
               </div>
+
+              {/* Weather — year follows chartYear toggle above */}
+              <div className="rounded-2xl border border-border bg-bg-card p-5">
+                <div className="mb-3 flex items-center justify-between gap-2">
+                  <p className="flex items-center gap-2 text-sm font-medium text-text-primary">
+                    <CloudRain className="h-4 w-4 text-sky-400" />
+                    Site weather · {selected.city}
+                  </p>
+                  <span className="text-[10px] uppercase tracking-wider text-text-muted">{chartYear}</span>
+                </div>
+
+                {selectedWeather ? (
+                  <>
+                    <div className="mb-4 grid grid-cols-2 gap-2">
+                      <WeatherStat label="Stoppage days" value={String(selectedWeather.stoppageDays)} accent="amber" />
+                      <WeatherStat label="Total rain" value={`${selectedWeather.totalRainfallMm}mm`} />
+                      <WeatherStat label="Heavy rain days" value={String(selectedWeather.rainDays)} />
+                      <WeatherStat label="Frost days" value={String(selectedWeather.frostDays)} />
+                    </div>
+                    <ResponsiveContainer width="100%" height={160}>
+                      <ComposedChart data={selectedMonthlyWeather} margin={{ left: -8, right: 4, top: 4 }}>
+                        <XAxis
+                          dataKey="label"
+                          tick={{ fill: "#9ca3af", fontSize: 10 }}
+                          axisLine={false}
+                          tickLine={false}
+                        />
+                        <YAxis
+                          yAxisId="rain"
+                          tick={{ fill: "#9ca3af", fontSize: 10 }}
+                          axisLine={false}
+                          tickLine={false}
+                          width={36}
+                          tickFormatter={(v) => `${v}`}
+                        />
+                        <YAxis
+                          yAxisId="stop"
+                          orientation="right"
+                          tick={{ fill: "#9ca3af", fontSize: 10 }}
+                          axisLine={false}
+                          tickLine={false}
+                          width={28}
+                          allowDecimals={false}
+                        />
+                        <Tooltip
+                          contentStyle={TOOLTIP_STYLE}
+                          labelStyle={{ color: "#fff" }}
+                          formatter={(v, name) => [
+                            name === "rainfallMm" ? `${Number(v ?? 0)}mm` : String(v ?? 0),
+                            name === "rainfallMm" ? "Rainfall" : "Stoppage days",
+                          ]}
+                          cursor={{ fill: "rgba(255,255,255,0.04)" }}
+                        />
+                        <Bar
+                          yAxisId="rain"
+                          dataKey="rainfallMm"
+                          fill="#38bdf8"
+                          radius={[3, 3, 0, 0]}
+                          maxBarSize={20}
+                          name="rainfallMm"
+                        />
+                        <Line
+                          yAxisId="stop"
+                          type="monotone"
+                          dataKey="stoppageDays"
+                          stroke="#fbbf24"
+                          strokeWidth={2}
+                          dot={false}
+                          name="stoppageDays"
+                        />
+                      </ComposedChart>
+                    </ResponsiveContainer>
+                    <p className="mt-2 text-[10px] text-text-subtle">
+                      Open-Meteo archive · {selectedWeather.daysTracked} days tracked in {chartYear}
+                    </p>
+                  </>
+                ) : (
+                  <p className="text-xs text-text-muted">
+                    No weather history for {selected.city} in {chartYear}. Run{" "}
+                    <code className="font-mono">npm run data:forecast</code> to cache archive data.
+                  </p>
+                )}
+              </div>
             </>
           ) : (
             /* Comparison panel */
@@ -375,12 +485,61 @@ export function PortfolioPage() {
                 </BarChart>
               </ResponsiveContainer>
               <p className="mt-3 text-center text-xs text-text-subtle">
-                Click a marker or chip to drill into monthly detail
+                Click a marker or chip to drill into revenue and weather detail
               </p>
+
+              {weatherHistory && weatherComparison.some((w) => w.stoppageDays > 0) ? (
+                <div className="mt-4 border-t border-border pt-4">
+                  <p className="mb-3 flex items-center gap-2 text-sm font-medium text-text-primary">
+                    <CloudRain className="h-4 w-4 text-sky-400" />
+                    Stoppage days · {chartYear}
+                  </p>
+                  <ResponsiveContainer width="100%" height={140}>
+                    <BarChart data={weatherComparison} layout="vertical" margin={{ left: 0, right: 12, top: 0 }}>
+                      <XAxis type="number" tick={{ fill: "#9ca3af", fontSize: 10 }} axisLine={false} tickLine={false} />
+                      <YAxis
+                        type="category"
+                        dataKey="name"
+                        tick={{ fill: "#9ca3af", fontSize: 11 }}
+                        axisLine={false}
+                        tickLine={false}
+                        width={72}
+                      />
+                      <Tooltip
+                        contentStyle={TOOLTIP_STYLE}
+                        formatter={(v, _n, item) => [
+                          `${v} stoppage days · ${(item.payload as { rainfallMm: number }).rainfallMm}mm rain`,
+                          "Weather",
+                        ]}
+                      />
+                      <Bar dataKey="stoppageDays" fill="#38bdf8" radius={[0, 4, 4, 0]} maxBarSize={18} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              ) : null}
             </div>
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+function WeatherStat({
+  label,
+  value,
+  accent,
+}: {
+  label: string;
+  value: string;
+  accent?: "amber";
+}) {
+  return (
+    <div className="rounded-xl bg-bg-tertiary p-3">
+      <p className="text-[10px] uppercase tracking-wider text-text-muted">{label}</p>
+      <p className={`mt-1 text-base font-bold ${accent === "amber" ? "text-amber-400" : "text-text-primary"}`}>
+        {value}
+      </p>
     </div>
   );
 }

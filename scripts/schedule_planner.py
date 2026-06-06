@@ -55,7 +55,13 @@ def add_notification(
     return entry
 
 
-def ai_crew_briefing(sites: list[dict], weather_summary: str) -> str | None:
+def ai_crew_briefing(
+    sites: list[dict],
+    weather_summary: str,
+    daily_forecast: list[dict] | None = None,
+    view_mode: str = "week",
+    selected_date: str | None = None,
+) -> str | None:
     """Optional Anthropic briefing for crew schedule."""
     import os
     import urllib.error
@@ -68,15 +74,21 @@ def ai_crew_briefing(sites: list[dict], weather_summary: str) -> str | None:
 
     api_key = os.environ.get("ANTHROPIC_API_KEY")
     model = os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-4-20250514")
+    daily_block = ""
+    if daily_forecast:
+        daily_block = f"\n\nDay-by-day forecast (Open-Meteo):\n{json.dumps(daily_forecast, indent=2)}\n"
+
+    scope = f"Focus on {'the single day ' + selected_date if view_mode == 'day' and selected_date else 'the full week'}."
     prompt = f"""You are the Altis Groep field operations planner for Dutch roofing crews.
 
 Weather summary: {weather_summary}
-
-Site-week plans (JSON):
+{scope}{daily_block}
+Site plans (JSON):
 {json.dumps(sites[:12], indent=2)}
 
-Write a concise crew briefing for a WhatsApp group (max 180 words):
-- Which cities get outdoor work vs indoor/alternate tasks this week
+Write a concise crew briefing for a WhatsApp group (max 220 words):
+- Start with a day-by-day rain/dry outlook (which days rain at which cities)
+- Which cities get outdoor work vs indoor/alternate tasks
 - Specific practical guidance (membrane work, stand-down, admin)
 - One line on cash-flow impact if billing may slip
 

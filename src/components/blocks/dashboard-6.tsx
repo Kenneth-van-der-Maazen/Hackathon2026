@@ -1,4 +1,5 @@
-import { Calendar, ChevronRight, CloudRain, MoreHorizontal, SlidersHorizontal, Sparkles, Wallet } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { ChevronRight, CloudRain, MoreHorizontal, SlidersHorizontal, Sparkles, Wallet } from "lucide-react";
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, XAxis } from "recharts";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -21,16 +22,26 @@ import { CovenantBanner } from "@/components/CovenantBanner";
 import { TracePanel } from "@/components/TracePanel";
 import { Delta, DeltaIcon, DeltaValue } from "@/components/delta";
 import { formatEuro } from "@/lib/format";
+import { aggregateForecastWeeks, listOpcos, resolveTraceOpco, shortOpcoLabel } from "@/lib/opcoFilter";
+import { enrichWeeksWithDates, forecastWindowLabel, weekRangeLabel } from "@/lib/forecastWindow";
+import { monthBuckets } from "@/lib/unifiedRange";
+import { activeScenarioMeta, needsOpcoScenarioFetch } from "@/lib/scenarioForecast";
+import { ActualsRangeBanner, ForecastRangePicker } from "@/components/ForecastRangePicker";
 import { SCENARIO_LABELS } from "@/types";
 import type {
   CovenantSummary,
+  DashboardViewMode,
   DriverKey,
   ForecastData,
+  ForecastMeta,
   ScenarioId,
   TraceRecord,
   TraceSelection,
+  UnifiedRangeSummary,
+  UnifiedTimeseries,
   WeatherInsights,
   WipProject,
+  WeekForecast,
 } from "@/types";
 
 interface Dashboard6Props {
@@ -39,11 +50,13 @@ interface Dashboard6Props {
   traces: TraceRecord[];
   weatherInsights: WeatherInsights | null;
   wip: WipProject[];
+  timeseries: UnifiedTimeseries | null;
   scenario: ScenarioId;
   onScenarioChange: (s: ScenarioId) => void;
   traceSelection: TraceSelection | null;
   onTraceSelect: (s: TraceSelection) => void;
   onTraceClose: () => void;
+  onForecastRebuilt?: () => Promise<void>;
 }
 
 function greeting() {
@@ -70,19 +83,91 @@ const ordersChartConfig = {
   net: { label: "Net", color: "var(--chart-1)" },
 } satisfies ChartConfig;
 
+const actualsChartConfig = {
+  billing: { label: "Billing", color: "var(--chart-2)" },
+} satisfies ChartConfig;
+
 export function Dashboard6({
   forecast,
   covenant,
   traces,
   weatherInsights,
   wip,
+  timeseries,
   scenario,
   onScenarioChange,
   traceSelection,
   onTraceSelect,
   onTraceClose,
+  onForecastRebuilt,
 }: Dashboard6Props) {
-  const weeks = forecast[scenario] ?? [];
+  const [viewMode, setViewMode] = useState<DashboardViewMode>("forecast");
+  const [actuals, setActuals] = useState<UnifiedRangeSummary | null>(null);
+  const [selectedOpco, setSelectedOpco] = useState("all");
+  const [opcoScenarioView, setOpcoScenarioView] = useState<{
+    meta: ForecastMeta;
+    weeks: WeekForecast[];
+    traces: TraceRecord[];
+  } | null>(null);
+  const [opcoScenarioLoading, setOpcoScenarioLoading] = useState(false);
+
+  const opcos = useMemo(() => listOpcos(timeseries, wip), [timeseries, wip]);
+
+  const activeMeta = useMemo(
+    () => activeScenarioMeta(forecast, scenario, selectedOpco, opcoScenarioView?.meta),
+    [forecast, scenario, selectedOpco, opcoScenarioView],
+  );
+
+  useEffect(() => {
+    if (!needsOpcoScenarioFetch(scenario, selectedOpco)) {
+      setOpcoScenarioView(null);
+      return;
+    }
+    let cancelled = false;
+    setOpcoScenarioLoading(true);
+    void fetch(
+      `/api/forecast/scenario-window?scenario=${scenario}&opco=${encodeURIComponent(selectedOpco)}`,
+    )
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error("Scenario window failed"))))
+      .then((data) => {
+        if (!cancelled) {
+          setOpcoScenarioView({
+            meta: data.meta,
+            weeks: data.weeks ?? [],
+            traces: data.traces ?? [],
+          });
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setOpcoScenarioView(null);
+      })
+      .finally(() => {
+        if (!cancelled) setOpcoScenarioLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [scenario, selectedOpco]);
+
+  const filteredTraces = useMemo(() => {
+    const pool = opcoScenarioView?.traces?.length
+      ? opcoScenarioView.traces
+      : traces.filter((t) => t.scenario === scenario);
+    if (selectedOpco === "all") return pool;
+    return pool.filter((t) => resolveTraceOpco(t, wip) === selectedOpco);
+  }, [traces, scenario, selectedOpco, wip, opcoScenarioView]);
+
+  const weeks = useMemo(() => {
+    let raw: WeekForecast[];
+    if (opcoScenarioView?.weeks?.length) {
+      raw = opcoScenarioView.weeks;
+    } else if (selectedOpco === "all") {
+      raw = forecast[scenario] ?? [];
+    } else {
+      raw = aggregateForecastWeeks(forecast.base ?? [], traces, scenario, selectedOpco, wip);
+    }
+    return enrichWeeksWithDates(raw, activeMeta);
+  }, [forecast, scenario, traces, selectedOpco, wip, opcoScenarioView, activeMeta]);
   const baseWeeks = forecast.base ?? [];
   const netTotal = computeNet(weeks);
   const baseNet = computeNet(baseWeeks);
@@ -90,10 +175,23 @@ export function Dashboard6({
   const headroom = covenant.headroomByScenario[scenario] ?? covenant.headroomThresholdEur;
   const headroomBase = covenant.headroomByScenario.base ?? covenant.headroomThresholdEur;
   const headroomDelta = pctDelta(headroom, headroomBase);
-  const atRisk = wip.filter((p) => p.status === "At Risk" || p.status === "Delayed");
+  const atRisk = wip.filter(
+    (p) =>
+      (selectedOpco === "all" || p.opco === selectedOpco) &&
+      (p.status === "At Risk" || p.status === "Delayed"),
+  );
   const atRiskDelta = atRisk.length > 0 ? 12.5 : -4.2;
 
-  const chartRows = weeks.map((w) => ({ label: w.label, net: w.net / 1000 }));
+  const chartRows = weeks.map((w) => ({
+    label: w.chartLabel ?? w.label,
+    weekLabel: w.label,
+    net: w.net / 1000,
+  }));
+  const actualsChartRows = actuals ? monthBuckets(actuals).map((m) => ({
+    label: m.label,
+    billing: m.billing / 1000,
+  })) : [];
+  const showingActuals = viewMode === "actuals" && actuals;
   const peakWeek = weeks.reduce((best, w) => (w.net > best.net ? w : best), weeks[0]);
 
   const driverTotals = {
@@ -119,11 +217,6 @@ export function Dashboard6({
       ? "Covenant headroom tight under wet scenario"
       : null;
 
-  const today = new Date();
-  const start = new Date(today);
-  start.setDate(today.getDate() - 91);
-  const fmt = (d: Date) => d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-
   const gaugePct = Math.min(100, Math.max(0, (headroom / covenant.headroomThresholdEur) * 100));
   const gaugeTicks = 36;
   const activeTicks = Math.round((gaugePct / 100) * gaugeTicks);
@@ -132,6 +225,18 @@ export function Dashboard6({
     <div className="space-y-6">
       <CovenantBanner scenario={scenario} covenant={covenant} />
 
+      {scenario !== "base" && activeMeta?.selectionReason && !showingActuals ? (
+        <div className="rounded-xl border border-sky-500/30 bg-sky-500/5 px-4 py-3 text-sm">
+          <p className="font-medium text-sky-100">
+            {SCENARIO_LABELS[scenario]} · {forecastWindowLabel(activeMeta)}
+          </p>
+          <p className="mt-1 text-muted-foreground">{activeMeta.selectionReason}</p>
+          {opcoScenarioLoading ? (
+            <p className="mt-1 text-xs text-muted-foreground">Recalculating for {shortOpcoLabel(selectedOpco)}…</p>
+          ) : null}
+        </div>
+      ) : null}
+
       {/* Toolbar */}
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
@@ -139,7 +244,24 @@ export function Dashboard6({
           <p className="text-sm text-muted-foreground">Altis Groep · 13-week cash flow forecast</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Select value={scenario} onValueChange={(v) => onScenarioChange(v as ScenarioId)}>
+          <Select value={selectedOpco} onValueChange={setSelectedOpco}>
+            <SelectTrigger className="h-9 w-[150px] rounded-full bg-card">
+              <SelectValue placeholder="All opcos" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All opcos</SelectItem>
+              {opcos.map((opco) => (
+                <SelectItem key={opco} value={opco}>
+                  {shortOpcoLabel(opco)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select
+            value={scenario}
+            onValueChange={(v) => onScenarioChange(v as ScenarioId)}
+            disabled={Boolean(showingActuals)}
+          >
             <SelectTrigger className="h-9 w-[140px] rounded-full bg-card">
               <SelectValue />
             </SelectTrigger>
@@ -151,13 +273,21 @@ export function Dashboard6({
               ))}
             </SelectContent>
           </Select>
-          <Button variant="outline" size="sm" className="h-9 rounded-full gap-2">
-            <Calendar className="size-4" />
-            <span className="hidden sm:inline">
-              {fmt(start)} – {fmt(today)}
-            </span>
-          </Button>
-          <Button variant="outline" size="icon-sm" className="rounded-full">
+          <ForecastRangePicker
+            meta={activeMeta}
+            timeseries={timeseries}
+            viewMode={viewMode}
+            onViewModeChange={setViewMode}
+            onActualsChange={setActuals}
+            onForecastRebuilt={onForecastRebuilt}
+            selectedOpco={selectedOpco}
+          />
+          <Button
+            variant="outline"
+            size="icon-sm"
+            className="rounded-full"
+            title={`Opco: ${shortOpcoLabel(selectedOpco)} · Scenario: ${SCENARIO_LABELS[scenario]}`}
+          >
             <SlidersHorizontal className="size-4" />
           </Button>
           <Button variant="outline" size="icon-sm" className="rounded-full">
@@ -166,12 +296,40 @@ export function Dashboard6({
         </div>
       </div>
 
+      {actuals ? (
+        <ActualsRangeBanner
+          summary={actuals}
+          opcoLabel={selectedOpco !== "all" ? shortOpcoLabel(selectedOpco) : undefined}
+          onClear={() => {
+            setActuals(null);
+            setViewMode("forecast");
+          }}
+        />
+      ) : null}
+
+      {selectedOpco !== "all" && !showingActuals ? (
+        <div className="rounded-xl border border-border bg-card/40 px-4 py-2 text-xs text-muted-foreground">
+          Showing 13-week forecast for <strong className="text-foreground">{shortOpcoLabel(selectedOpco)}</strong>{" "}
+          — traced from unified database rows for this opco.
+        </div>
+      ) : null}
+
       {/* KPI strip */}
       <Card className="py-0 ring-1 ring-border/60">
         <CardContent className="flex flex-wrap divide-x divide-border-strong p-0">
-          <KpiCell label="13-week net cash" value={formatEuro(netTotal)} delta={netDelta} />
-          <KpiCell label="Covenant headroom" value={formatEuro(headroom)} delta={headroomDelta} />
-          <KpiCell label="Projects at risk" value={String(atRisk.length)} delta={atRiskDelta} suffix="" />
+          {showingActuals ? (
+            <>
+              <KpiCell label="Period billing" value={formatEuro(actuals.billing)} suffix="" />
+              <KpiCell label="Period net cash" value={formatEuro(actuals.net)} suffix="" />
+              <KpiCell label="Rows in period" value={actuals.rowCount.toLocaleString()} suffix="" />
+            </>
+          ) : (
+            <>
+              <KpiCell label="13-week net cash" value={formatEuro(netTotal)} delta={netDelta} />
+              <KpiCell label="Covenant headroom" value={formatEuro(headroom)} delta={headroomDelta} />
+              <KpiCell label="Projects at risk" value={String(atRisk.length)} delta={atRiskDelta} suffix="" />
+            </>
+          )}
         </CardContent>
       </Card>
 
@@ -181,32 +339,55 @@ export function Dashboard6({
           <CardHeader className="pb-2">
             <div className="flex items-end justify-between gap-3">
               <div>
-                <CardTitle className="text-3xl font-semibold tabular-nums">{formatEuro(netTotal)}</CardTitle>
-                <CardDescription>Net cash — {SCENARIO_LABELS[scenario]}</CardDescription>
+                <CardTitle className="text-3xl font-semibold tabular-nums">
+                  {showingActuals ? formatEuro(actuals.billing) : formatEuro(netTotal)}
+                </CardTitle>
+              <CardDescription>
+                {showingActuals
+                  ? `Billing from unified database · ${actuals.start} → ${actuals.end}`
+                  : `Net cash — ${SCENARIO_LABELS[scenario]}${
+                      activeMeta?.forecastStart
+                        ? ` · ${forecastWindowLabel(activeMeta)}`
+                        : ""
+                    }`}
+              </CardDescription>
               </div>
-              <Delta value={netDelta} variant="badge">
-                <DeltaIcon />
-                <DeltaValue suffix="% over base" />
-              </Delta>
+              {!showingActuals ? (
+                <Delta value={netDelta} variant="badge">
+                  <DeltaIcon />
+                  <DeltaValue suffix="% over base" />
+                </Delta>
+              ) : null}
             </div>
           </CardHeader>
           <CardContent>
-            <ChartContainer config={netChartConfig} className="aspect-[2.4/1] w-full">
-              <AreaChart data={chartRows} margin={{ left: 0, right: 8, top: 8, bottom: 0 }}>
-                <CartesianGrid vertical={false} strokeDasharray="4 4" />
-                <XAxis dataKey="label" tickLine={false} axisLine={false} tickMargin={8} />
-                <ChartTooltip content={<ChartTooltipContent />} />
-                <Area
-                  type="monotone"
-                  dataKey="net"
-                  stroke="var(--color-chart-1)"
-                  fill="var(--color-chart-1)"
-                  fillOpacity={0.08}
-                  strokeWidth={2}
-                  dot={false}
-                />
-              </AreaChart>
-            </ChartContainer>
+            {showingActuals ? (
+              <ChartContainer config={actualsChartConfig} className="aspect-[2.4/1] w-full">
+                <BarChart data={actualsChartRows} margin={{ left: 0, right: 8, top: 8, bottom: 0 }}>
+                  <CartesianGrid vertical={false} strokeDasharray="4 4" />
+                  <XAxis dataKey="label" tickLine={false} axisLine={false} tickMargin={8} />
+                  <ChartTooltip content={<ChartTooltipContent />} />
+                  <Bar dataKey="billing" fill="var(--color-chart-2)" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ChartContainer>
+            ) : (
+              <ChartContainer config={netChartConfig} className="aspect-[2.4/1] w-full">
+                <AreaChart data={chartRows} margin={{ left: 0, right: 8, top: 8, bottom: 0 }}>
+                  <CartesianGrid vertical={false} strokeDasharray="4 4" />
+                  <XAxis dataKey="label" tickLine={false} axisLine={false} tickMargin={8} />
+                  <ChartTooltip content={<ChartTooltipContent />} />
+                  <Area
+                    type="monotone"
+                    dataKey="net"
+                    stroke="var(--color-chart-1)"
+                    fill="var(--color-chart-1)"
+                    fillOpacity={0.08}
+                    strokeWidth={2}
+                    dot={false}
+                  />
+                </AreaChart>
+              </ChartContainer>
+            )}
           </CardContent>
         </Card>
 
@@ -369,7 +550,9 @@ export function Dashboard6({
           </ChartContainer>
           {peakWeek && (
             <p className="mt-2 text-xs text-muted-foreground">
-              Peak {peakWeek.label}: {formatEuro(peakWeek.net)}
+              Peak {peakWeek.label}
+              {peakWeek.weekStart ? ` (${weekRangeLabel(peakWeek.weekStart, peakWeek.weekEnd)})` : ""}:{" "}
+              {formatEuro(peakWeek.net)}
             </p>
           )}
         </CardContent>
@@ -377,7 +560,12 @@ export function Dashboard6({
 
       {/* Driver chart + needs attention */}
       <div className="grid gap-4 xl:grid-cols-[1fr_320px]">
-        <CashFlowChart weeks={weeks} scenario={scenario} onBarClick={onTraceSelect} />
+        <CashFlowChart
+          weeks={weeks}
+          scenario={scenario}
+          forecastMeta={activeMeta}
+          onBarClick={onTraceSelect}
+        />
         <Card className="ring-1 ring-border/60">
           <CardHeader>
             <CardTitle className="text-base">Needs attention</CardTitle>
@@ -399,7 +587,7 @@ export function Dashboard6({
 
       <TracePanel
         selection={traceSelection}
-        traces={traces}
+        traces={filteredTraces}
         weekAmount={weekAmount}
         onClose={onTraceClose}
       />
@@ -415,19 +603,19 @@ function KpiCell({
 }: {
   label: string;
   value: string;
-  delta: number;
+  delta?: number;
   suffix?: string;
 }) {
   return (
     <div className="min-w-[160px] flex-1 px-6 py-5">
       <p className="text-sm text-muted-foreground">{label}</p>
       <p className="mt-1 text-2xl font-semibold tabular-nums">{value}</p>
-      {suffix && (
+      {suffix && delta !== undefined ? (
         <Delta value={delta} className="mt-1">
           <DeltaIcon />
           <DeltaValue suffix={` ${suffix}`} />
         </Delta>
-      )}
+      ) : null}
     </div>
   );
 }

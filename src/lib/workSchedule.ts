@@ -1,4 +1,4 @@
-import type { WeatherInsights, WipProject } from "../types";
+import type { ForecastMeta, WeatherDailyDay, WeatherInsights, WipProject } from "../types";
 
 export type WorkMode = "outdoor" | "indoor" | "mixed" | "stand_down";
 
@@ -168,6 +168,125 @@ export function buildSchedulePlan(
     summary: `${outdoorCount} site-weeks with outdoor priority, ${standDown} stand-down. Based on Open-Meteo + unified WIP.`,
     sites: sites.sort((a, b) => a.week - b.week || a.city.localeCompare(b.city)),
   };
+}
+
+/** Fallback when weather_insights.json is empty — still show crew plans from WIP. */
+export function buildFallbackSchedulePlan(
+  wip: WipProject[],
+  selectedWeek: number,
+  meta?: ForecastMeta,
+): SchedulePlan {
+  const weekStartIso = meta?.forecastStart
+    ? (() => {
+        const d = new Date(`${meta.forecastStart}T12:00:00`);
+        d.setDate(d.getDate() + (selectedWeek - 1) * 7);
+        return d.toISOString().slice(0, 10);
+      })()
+    : `Week ${selectedWeek}`;
+
+  const opcoByCity = new Map<string, string>();
+  for (const p of wip) {
+    if (p.city && p.opco) opcoByCity.set(p.city, p.opco);
+  }
+
+  const cities =
+    opcoByCity.size > 0
+      ? [...opcoByCity.entries()]
+      : wip.map((p) => [p.city, p.opco] as const).filter(([c]) => c && c !== "Unknown");
+
+  const unique = new Map<string, string>();
+  for (const [city, opco] of cities) {
+    if (city) unique.set(city, opco);
+  }
+
+  const sites: SiteWeekPlan[] = [...unique.entries()].map(([city, opco]) => {
+    const linked = wip
+      .filter((p) => p.city === city || p.opco === opco)
+      .map((p) => p.project);
+    const mode: WorkMode = "outdoor";
+    const base = {
+      city,
+      opco,
+      week: selectedWeek,
+      weekLabel: `W${selectedWeek}`,
+      weekStart: weekStartIso,
+      mode,
+      rainfallMm: 0,
+      stoppageDays: 0,
+      tempRange: "—",
+      linkedProjects: linked,
+      notifyRecommended: false,
+    };
+    return {
+      ...base,
+      outdoorTasks: tasks("outdoor", OUTDOOR_BY_MODE[mode], `${city}-out-${selectedWeek}`),
+      indoorTasks: tasks("indoor", OUTDOOR_BY_MODE.outdoor, `${city}-in-${selectedWeek}`),
+      crewMessage: `${city} W${selectedWeek}: Weather data not loaded — assuming dry conditions. Run npm run data:weather for live stoppage days.${linked.length ? ` Projects: ${linked.join(", ")}.` : ""}`,
+    };
+  });
+
+  return {
+    generatedAt: new Date().toISOString(),
+    weatherSource: "Unavailable",
+    summary: `${sites.length} sites from unified WIP. Fetch weather (npm run data:weather) for rain/frost stoppage planning.`,
+    sites,
+  };
+}
+
+export function buildDaySchedulePlan(
+  weatherDaily: WeatherDailyDay[],
+  wip: WipProject[],
+  date: string,
+): SchedulePlan | null {
+  if (!weatherDaily.length) return null;
+
+  const sites: SiteWeekPlan[] = weatherDaily.map((day) => {
+    const stoppageDays = day.isStoppage ? 1 : 0;
+    const mode = modeFromWeather(stoppageDays, day.rainfallMm, day.stoppageReasons.includes("frost") ? 1 : 0);
+    const linked = wip
+      .filter(
+        (p) =>
+          p.project.toLowerCase().includes(day.city.toLowerCase()) ||
+          p.city === day.city ||
+          p.opco.toLowerCase().includes(day.city.toLowerCase()),
+      )
+      .map((p) => p.project);
+    const opco = wip.find((p) => p.city === day.city)?.opco ?? day.city;
+
+    const base = {
+      city: day.city,
+      opco,
+      week: 0,
+      weekLabel: dayLabel(date),
+      weekStart: date,
+      mode,
+      rainfallMm: day.rainfallMm,
+      stoppageDays,
+      tempRange: `${day.tempMinC}°C – ${day.tempMaxC}°C`,
+      linkedProjects: linked,
+      notifyRecommended: mode === "indoor" || mode === "stand_down",
+    };
+
+    return {
+      ...base,
+      outdoorTasks: tasks("outdoor", OUTDOOR_BY_MODE[mode], `${day.city}-out-${date}`),
+      indoorTasks: tasks("indoor", INDOOR_BY_MODE[mode], `${day.city}-in-${date}`),
+      crewMessage: crewMessage({ ...base, weekLabel: dayLabel(date) }),
+    };
+  });
+
+  return {
+    generatedAt: new Date().toISOString(),
+    weatherSource: "Open-Meteo (daily)",
+    summary: `${sites.filter((s) => s.mode === "outdoor").length} sites outdoor, ${sites.filter((s) => s.notifyRecommended).length} need crew alerts on ${dayLabel(date)}.`,
+    sites,
+  };
+}
+
+function dayLabel(iso: string): string {
+  const d = new Date(`${iso}T12:00:00`);
+  const names = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  return `${names[d.getDay()]} ${d.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`;
 }
 
 export const MODE_LABELS: Record<WorkMode, string> = {

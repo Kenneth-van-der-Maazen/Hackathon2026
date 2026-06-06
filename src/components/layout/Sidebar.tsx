@@ -1,4 +1,4 @@
-import { Building2, CloudRain, Database, LayoutDashboard, Users } from "lucide-react";
+import { Building2, CloudRain, Database, LayoutDashboard } from "lucide-react";
 import { ScenarioToggle } from "../ScenarioToggle";
 import type { RoleId, ScenarioId } from "../../types";
 
@@ -13,7 +13,6 @@ interface SidebarProps {
 export function Sidebar({ role, scenario, onRoleChange, onScenarioChange, weatherSource }: SidebarProps) {
   const roles: { id: RoleId; label: string; icon: typeof LayoutDashboard }[] = [
     { id: "cfo", label: "CFO", icon: LayoutDashboard },
-    { id: "opco", label: "Opco MD", icon: Users },
     { id: "data", label: "Data Upload", icon: Database },
   ];
 

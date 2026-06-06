@@ -8,9 +8,11 @@ import {
   Database,
   FileSpreadsheet,
   Loader2,
+  Plus,
   Sparkles,
   Upload,
 } from "lucide-react";
+import { OpcoDiscoveryWizard } from "../components/OpcoDiscoveryWizard";
 import { useUploadApi } from "../hooks/useUploadApi";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -24,15 +26,24 @@ import {
 } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { Separator } from "@/components/ui/separator";
-import type { DuplicateCheck, GlCategory, StoreRouting, UploadAnalysis } from "../types/upload";
-import { GL_CATEGORY_LABELS, STORE_LABELS, UNIFIED_FIELDS } from "../types/upload";
+import type { DuplicateCheck, GlCategory, StoreRouting, UploadAnalysis, ScanSummary } from "../types/upload";
+import { GL_CATEGORY_LABELS, STORE_LABELS, FILE_COLUMN_FIELDS } from "../types/upload";
+import type { PortfolioCompany } from "../types/upload";
 
-type Step = "upload" | "briefing" | "review" | "merging" | "done";
+type Step = "upload" | "scanning" | "briefing" | "review" | "merging" | "done";
+
+const SCAN_STAGES = [
+  "Detecting portfolio company…",
+  "Parsing workbook & trained format…",
+  "Validating rows & column mapping…",
+  "Checking duplicates & store routing…",
+] as const;
 
 const MERGE_STAGES = [
   "Validating row mappings…",
   "Writing to central database…",
   "Refreshing 13-week forecast…",
+  "Fetching Open-Meteo weather…",
 ] as const;
 
 const GL_OPTIONS: GlCategory[] = [
@@ -46,20 +57,29 @@ const GL_OPTIONS: GlCategory[] = [
 
 const STEPS: { id: Step; label: string }[] = [
   { id: "upload", label: "Upload" },
+  { id: "scanning", label: "Scan" },
   { id: "briefing", label: "AI briefing" },
   { id: "review", label: "Technical review" },
   { id: "merging", label: "Merging" },
   { id: "done", label: "Merged" },
 ];
 
-export function DataUploadPage() {
-  const { aiAvailable, stats, loading, error, analyzeFile, confirmUpload } = useUploadApi();
+export function DataUploadPage({ onUploadComplete }: { onUploadComplete?: () => Promise<void> }) {
+  const { aiAvailable, companies, stats, loading, error, ingestFile, confirmUpload, refreshCompanies } =
+    useUploadApi();
   const [analysis, setAnalysis] = useState<UploadAnalysis | null>(null);
   const [step, setStep] = useState<Step>("upload");
+  const [discovery, setDiscovery] = useState<{
+    mode: "manual" | "from_upload";
+    uploadId?: string;
+    filename?: string;
+    reason?: string;
+  } | null>(null);
   const [opco, setOpco] = useState("");
   const [city, setCity] = useState("");
   const [sourceSystem, setSourceSystem] = useState("");
-  const [useAi, setUseAi] = useState(true);
+  const [scanProgress, setScanProgress] = useState(0);
+  const [scanStage, setScanStage] = useState<string>(SCAN_STAGES[0]);
   const [confirmed, setConfirmed] = useState<{
     rowsAdded: number;
     totalRows: number;
@@ -70,35 +90,78 @@ export function DataUploadPage() {
   const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const applyCompany = useCallback((company: PortfolioCompany | undefined) => {
+    if (!company) return;
+    setOpco(company.opcoName);
+    setCity(company.city);
+    setSourceSystem(company.sourceSystem);
+  }, []);
+
   const handleFile = useCallback(
     async (file: File) => {
       setConfirmed(null);
-      setStep("upload");
+      setDiscovery(null);
+      setStep("scanning");
+      setScanProgress(8);
+      setScanStage(SCAN_STAGES[0]);
+
+      const stageTimers = [
+        window.setTimeout(() => {
+          setScanStage(SCAN_STAGES[1]);
+          setScanProgress(30);
+        }, 400),
+        window.setTimeout(() => {
+          setScanStage(SCAN_STAGES[2]);
+          setScanProgress(55);
+        }, 900),
+        window.setTimeout(() => {
+          setScanStage(SCAN_STAGES[3]);
+          setScanProgress(78);
+        }, 1400),
+      ];
+
       try {
-        const result = await analyzeFile(file, {
-          opco,
-          city,
-          sourceSystem: sourceSystem || undefined,
-          useAi: useAi && aiAvailable,
-        });
-        setAnalysis(result);
-        if (result.aiBriefing?.recommendedOpco && !opco) {
-          setOpco(result.aiBriefing.recommendedOpco);
+        const result = await ingestFile(file);
+        setScanProgress(100);
+        setScanStage("Scan complete");
+
+        if (result.needsDiscovery || result.analysis?.needsDiscovery) {
+          setDiscovery({
+            mode: "from_upload",
+            uploadId: result.uploadId,
+            filename: result.analysis?.filename ?? file.name,
+            reason: result.discoveryReason ?? result.analysis?.discoveryReason,
+          });
+          setStep("upload");
+          return;
         }
-        if (result.aiBriefing?.recommendedCity && !city) {
-          setCity(result.aiBriefing.recommendedCity);
+
+        const nextAnalysis = result.analysis;
+        if (!nextAnalysis) {
+          setStep("upload");
+          return;
         }
-        if (!sourceSystem && result.detectedSystem !== "Unknown") {
-          setSourceSystem(result.detectedSystem);
+
+        setAnalysis(nextAnalysis);
+        if (nextAnalysis.suggestedContext) {
+          setOpco(nextAnalysis.suggestedContext.opco);
+          setCity(nextAnalysis.suggestedContext.city);
+          setSourceSystem(nextAnalysis.suggestedContext.sourceSystem);
+        } else if (nextAnalysis.companyMatch) {
+          const hit = companies.find((c) => c.opcoId === nextAnalysis.companyMatch?.opcoId);
+          if (hit) applyCompany(hit);
         }
-        setStep(result.aiBriefing ? "briefing" : "review");
+
+        await new Promise((r) => window.setTimeout(r, 350));
+        setStep(nextAnalysis.aiBriefing?.summary ? "briefing" : "review");
       } catch {
-        /* error surfaced via useUploadApi */
+        setStep("upload");
       } finally {
+        stageTimers.forEach(clearTimeout);
         if (fileInputRef.current) fileInputRef.current.value = "";
       }
     },
-    [analyzeFile, opco, city, sourceSystem, useAi, aiAvailable],
+    [ingestFile, companies, applyCompany],
   );
 
   const onFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -148,6 +211,7 @@ export function DataUploadPage() {
     }, 160);
     const stage1 = window.setTimeout(() => setMergeStage(MERGE_STAGES[1]), 700);
     const stage2 = window.setTimeout(() => setMergeStage(MERGE_STAGES[2]), 1500);
+    const stage3 = window.setTimeout(() => setMergeStage(MERGE_STAGES[3]), 2300);
 
     try {
       const result = await confirmUpload(analysis.uploadId, {
@@ -159,6 +223,7 @@ export function DataUploadPage() {
       });
       setMergeProgress(100);
       setMergeStage("Merge complete");
+      await onUploadComplete?.();
       await new Promise((r) => window.setTimeout(r, 550));
       setConfirmed({
         rowsAdded: result.rowsAdded,
@@ -172,6 +237,7 @@ export function DataUploadPage() {
       window.clearInterval(progressTimer);
       window.clearTimeout(stage1);
       window.clearTimeout(stage2);
+      window.clearTimeout(stage3);
     }
   }
 
@@ -182,8 +248,8 @@ export function DataUploadPage() {
       <div>
         <h1 className="font-serif text-3xl tracking-tight">Ingest accounting data</h1>
         <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-          Drop an Excel or CSV export from Gilde, Yuki, Exact, or Snelstart. Claude analyses the
-          file, explains what it contains, and only merges after you confirm.
+          Drop an Excel or CSV export from a portfolio company. The system scans every row,
+          verifies the trained format, shows confidence scores, and only merges after you confirm.
         </p>
       </div>
 
@@ -224,55 +290,81 @@ export function DataUploadPage() {
         </Card>
       )}
 
+      {discovery && step === "upload" && (
+        <OpcoDiscoveryWizard
+          mode={discovery.mode}
+          uploadId={discovery.uploadId}
+          filename={discovery.filename}
+          discoveryReason={discovery.reason}
+          aiAvailable={aiAvailable}
+          onCancel={() => setDiscovery(null)}
+          onSaved={() => void refreshCompanies()}
+          onContinueIngest={(nextAnalysis) => {
+            setDiscovery(null);
+            setAnalysis(nextAnalysis);
+            if (nextAnalysis.suggestedContext) {
+              setOpco(nextAnalysis.suggestedContext.opco);
+              setCity(nextAnalysis.suggestedContext.city);
+              setSourceSystem(nextAnalysis.suggestedContext.sourceSystem);
+            }
+            setStep(nextAnalysis.aiBriefing ? "briefing" : "review");
+          }}
+        />
+      )}
+
       {step === "upload" && (
-        <div className="grid grid-cols-1 items-start gap-4 pt-1 lg:grid-cols-3 lg:gap-6">
-          <Card className="lg:col-span-1 border border-white/[0.08] pb-6 ring-0">
-            <CardHeader className="pb-0">
-              <CardTitle className="text-base">Context</CardTitle>
-              <CardDescription>Optional — AI will suggest opco and city if blank</CardDescription>
-            </CardHeader>
-            <CardContent className="pb-0">
-              <div className="space-y-5">
-                <Field
-                  label="Operating company"
-                  value={opco}
-                  onChange={setOpco}
-                  placeholder="e.g. Portfolio Company Heeze"
-                />
-                <Field label="City" value={city} onChange={setCity} placeholder="e.g. Heeze" />
-                <Field
-                  label="Source system"
-                  value={sourceSystem}
-                  onChange={setSourceSystem}
-                  placeholder="Auto-detected"
-                />
-                <label className="flex cursor-pointer items-center gap-2.5">
-                  <input
-                    type="checkbox"
-                    checked={useAi}
-                    disabled={!aiAvailable}
-                    onChange={(e) => setUseAi(e.target.checked)}
-                    className="h-4 w-4 rounded border-border accent-primary"
-                  />
-                  <span className="text-sm font-medium text-foreground/90">
-                    Use Anthropic AI analysis
-                  </span>
-                </label>
+        <div className="space-y-4 pt-1">
+          <Card className="border border-white/[0.08] ring-0">
+            <CardHeader className="pb-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <CardTitle className="text-base">Trained portfolio formats</CardTitle>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="gap-1"
+                  onClick={() => setDiscovery({ mode: "manual" })}
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  Create new opco
+                </Button>
               </div>
+              <CardDescription>
+                Drop a file — known formats auto-match. Unknown formats trigger AI onboarding.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              {companies.map((c) => (
+                <div
+                  key={c.opcoId}
+                  className="rounded-lg border border-border/60 bg-muted/20 px-3 py-3 text-xs"
+                >
+                  <p className="font-semibold text-foreground">{c.city}</p>
+                  <p className="mt-0.5 text-muted-foreground line-clamp-2">{c.opcoName}</p>
+                  <p className="mt-2 text-[10px] uppercase tracking-wider text-primary">
+                    {c.ingestProfile?.formatName ?? c.sourceSystem}
+                  </p>
+                  <p className="mt-1 text-[10px] text-muted-foreground">
+                    {c.dataFolder ?? c.filenamePatterns?.[0]}
+                  </p>
+                </div>
+              ))}
             </CardContent>
           </Card>
 
-          <Card className="lg:col-span-2 border border-white/[0.08] ring-0">
+          <Card className="border border-white/[0.08] ring-0">
             <CardHeader className="pb-0">
-              <CardTitle className="text-base">Upload file</CardTitle>
-              <CardDescription>Excel or CSV export from your accounting system</CardDescription>
+              <CardTitle className="text-base">Upload dataset</CardTitle>
+              <CardDescription>
+                Altis dataset 1 · Altis dataset 2 · portfolio company data · Yuki exports
+              </CardDescription>
             </CardHeader>
             <CardContent className="pb-6">
               <div
                 role="button"
                 tabIndex={0}
                 className={cn(
-                  "flex min-h-[280px] w-full cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-white/40 bg-white/[0.02] px-6 py-10 transition-colors",
+                  "flex min-h-[240px] w-full cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-white/40 bg-white/[0.02] px-6 py-10 transition-colors",
                   "hover:border-white/50 hover:bg-white/[0.04]",
                   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50",
                   dragOver && "border-primary/60 bg-primary/[0.06]",
@@ -304,9 +396,9 @@ export function DataUploadPage() {
                 {loading ? (
                   <>
                     <Loader2 className="h-10 w-10 animate-spin text-primary" aria-hidden />
-                    <p className="mt-4 font-medium">Analysing with AI…</p>
+                    <p className="mt-4 font-medium">Scanning dataset…</p>
                     <p className="mt-1 text-xs text-muted-foreground">
-                      Scanning columns, GL accounts, and date range
+                      Matching company · parsing format · validating rows
                     </p>
                   </>
                 ) : (
@@ -353,7 +445,11 @@ export function DataUploadPage() {
         </div>
       )}
 
-      {analysis && step === "briefing" && analysis.aiBriefing && (
+      {step === "scanning" && (
+        <ScanOverlay progress={scanProgress} stage={scanStage} />
+      )}
+
+      {analysis && step === "briefing" && analysis.aiBriefing?.summary && (
         <AiBriefingCard
           analysis={analysis}
           briefing={analysis.aiBriefing}
@@ -365,6 +461,17 @@ export function DataUploadPage() {
             setStep("upload");
           }}
         />
+      )}
+
+      {analysis && step === "briefing" && !analysis.aiBriefing?.summary && (
+        <Card>
+          <CardContent className="py-8 text-center text-sm text-muted-foreground">
+            Briefing unavailable — continue to technical review.
+            <Button className="mt-4" onClick={() => setStep("review")}>
+              Continue to review
+            </Button>
+          </CardContent>
+        </Card>
       )}
 
       {analysis && step === "review" && (
@@ -539,6 +646,75 @@ function DuplicateBanner({ check }: { check: DuplicateCheck }) {
   );
 }
 
+function ScanOverlay({ progress, stage }: { progress: number; stage: string }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 px-4 backdrop-blur-sm">
+      <Card className="w-full max-w-md animate-fade-up ring-1 ring-border/60">
+        <CardContent className="py-8">
+          <div className="flex flex-col items-center text-center">
+            <div className="relative mb-6 flex h-16 w-16 items-center justify-center">
+              <Loader2 className="h-12 w-12 animate-spin text-primary" />
+              <Brain className="absolute h-5 w-5 text-primary/80" />
+            </div>
+            <p className="text-lg font-medium">Scanning dataset</p>
+            <p className="mt-4 text-sm text-muted-foreground animate-merge-progress">{stage}</p>
+            <div className="mt-5 h-2 w-full overflow-hidden rounded-full bg-muted">
+              <div
+                className="h-full rounded-full bg-primary transition-all duration-300 ease-out"
+                style={{ width: `${progress}%` }}
+              />
+            </div>
+            <p className="mt-2 font-mono text-xs text-muted-foreground">{progress}%</p>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function ScanSummaryBanner({ summary }: { summary: ScanSummary }) {
+  const pct = Math.round(summary.overallConfidence * 100);
+  const ok = summary.mappingVerified && pct >= 85;
+
+  return (
+    <div
+      className={cn(
+        "rounded-lg border px-4 py-4",
+        ok ? "border-emerald-500/30 bg-emerald-500/8" : "border-amber-500/35 bg-amber-500/8",
+      )}
+    >
+      <div className="flex flex-wrap items-center gap-2">
+        {ok ? (
+          <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+        ) : (
+          <AlertTriangle className="h-4 w-4 text-amber-400" />
+        )}
+        <p className="text-sm font-medium">
+          {summary.trainedProfile ? "Trained format scan" : "Dataset scan"} — {pct}% confidence
+        </p>
+      </div>
+      <div className="mt-3 flex flex-wrap gap-4 text-xs text-muted-foreground">
+        <span>
+          <span className="text-foreground font-medium tabular-nums">
+            {summary.rowsScanned.toLocaleString()}
+          </span>{" "}
+          rows scanned
+        </span>
+        <span>
+          <span className="text-foreground font-medium tabular-nums">
+            {summary.rowsValid.toLocaleString()}
+          </span>{" "}
+          valid for merge
+        </span>
+        <span>{summary.mappingVerified ? "Mapping verified" : "Mapping needs review"}</span>
+        {summary.duplicateStatus && summary.duplicateStatus !== "all_new" && (
+          <span className="capitalize">{summary.duplicateStatus.replace(/_/g, " ")}</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function MergeOverlay({
   progress,
   stage,
@@ -652,8 +828,27 @@ function AiBriefingCard({
         <CardDescription className="flex flex-wrap items-center gap-2">
           <FileSpreadsheet className="h-3.5 w-3.5" />
           {analysis.filename}
+          {analysis.ingestProfile?.trained && (
+            <Badge variant="secondary" className="gap-1">
+              <Check className="h-3 w-3" />
+              Trained profile
+            </Badge>
+          )}
+          {analysis.scanSummary && (
+            <Badge
+              variant={analysis.scanSummary.overallConfidence >= 0.9 ? "secondary" : "outline"}
+              className="gap-1 font-mono tabular-nums"
+            >
+              {Math.round(analysis.scanSummary.overallConfidence * 100)}% confidence
+            </Badge>
+          )}
           {analysis.fileType === "xlsx" && analysis.sheetName && (
-            <Badge variant="outline">Sheet: {analysis.sheetName}</Badge>
+            <Badge variant="outline">{analysis.sheetName}</Badge>
+          )}
+          {(analysis.workbookProfile?.mergedSheets?.length ?? 0) > 1 && (
+            <Badge variant="outline">
+              {analysis.workbookProfile!.mergedSheets!.length} sheets merged
+            </Badge>
           )}
           <Badge variant="secondary">{analysis.detectedSystem}</Badge>
           <span>{analysis.rowCount.toLocaleString()} rows</span>
@@ -662,6 +857,7 @@ function AiBriefingCard({
       <CardContent className="space-y-5">
         {storeRouting && <StoreRoutingBanner routing={storeRouting} />}
         {duplicateCheck && <DuplicateBanner check={duplicateCheck} />}
+        {analysis.scanSummary && <ScanSummaryBanner summary={analysis.scanSummary} />}
 
         <div>
           <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
@@ -671,13 +867,15 @@ function AiBriefingCard({
         </div>
 
         <div className="grid gap-4 sm:grid-cols-3">
-          <Meta label="Data type" value={briefing.dataType} />
+          <Meta label="Data type" value={briefing.dataType ?? "unknown"} />
           <Meta
             label="Date range"
             value={
-              briefing.dateRange?.start && briefing.dateRange?.end
-                ? `${briefing.dateRange.start} → ${briefing.dateRange.end}`
-                : "Not detected"
+              analysis.datasetProfile?.dateRange?.start && analysis.datasetProfile?.dateRange?.end
+                ? `${analysis.datasetProfile.dateRange.start} → ${analysis.datasetProfile.dateRange.end}`
+                : briefing.dateRange?.start && briefing.dateRange?.end
+                  ? `${briefing.dateRange.start} → ${briefing.dateRange.end}`
+                  : "Not detected"
             }
           />
           <Meta
@@ -686,13 +884,45 @@ function AiBriefingCard({
           />
         </div>
 
-        {briefing.qualityChecks.length > 0 && (
+        {(analysis.workbookProfile || analysis.datasetProfile) && (
+          <div className="rounded-lg border border-border bg-muted/30 px-4 py-3 text-sm">
+            <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+              Workbook audit
+            </p>
+            {analysis.workbookProfile?.sheets && analysis.workbookProfile.sheets.length > 0 && (
+              <ul className="mt-2 space-y-1 text-muted-foreground">
+                {analysis.workbookProfile.sheets.map((s) => (
+                  <li key={s.name}>
+                    <span className="font-medium text-foreground">{s.name}</span>
+                    {" · "}
+                    {s.kind} · {s.rowCount.toLocaleString()} rows
+                    {s.yearBreakdown && Object.keys(s.yearBreakdown).length > 0 && (
+                      <> · {Object.entries(s.yearBreakdown).map(([y, n]) => `${y}: ${n}`).join(", ")}</>
+                    )}
+                    {s.skippedReason && <span className="text-amber-400"> (skipped: {s.skippedReason})</span>}
+                  </li>
+                ))}
+              </ul>
+            )}
+            {analysis.datasetProfile?.yearBreakdown &&
+              Object.keys(analysis.datasetProfile.yearBreakdown).length > 0 && (
+                <p className="mt-2 text-xs">
+                  Merged years:{" "}
+                  {Object.entries(analysis.datasetProfile.yearBreakdown)
+                    .map(([y, n]) => `${y} (${n.toLocaleString()} rows)`)
+                    .join(" · ")}
+                </p>
+              )}
+          </div>
+        )}
+
+        {(briefing.qualityChecks ?? []).length > 0 && (
           <div>
             <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
               Quality checks
             </p>
             <ul className="mt-2 space-y-1.5">
-              {briefing.qualityChecks.map((c) => (
+              {(briefing.qualityChecks ?? []).map((c) => (
                 <li key={c} className="flex gap-2 text-sm text-muted-foreground">
                   <span className="text-primary">•</span>
                   {c}
@@ -720,7 +950,7 @@ function AiBriefingCard({
           </p>
           <p className="mt-2 text-sm font-medium">{briefing.controllerQuestion}</p>
           <p className={`mt-2 text-xs ${recColor}`}>
-            Recommendation: {briefing.mergeRecommendation.replace("_", " ")}
+            Recommendation: {(briefing.mergeRecommendation ?? "review_required").replace(/_/g, " ")}
           </p>
         </div>
       </CardContent>
@@ -776,6 +1006,7 @@ function AnalysisReview({
     <div className="flex flex-col gap-5">
       {storeRouting && <StoreRoutingBanner routing={storeRouting} />}
       {duplicateCheck && <DuplicateBanner check={duplicateCheck} />}
+      {analysis.scanSummary && <ScanSummaryBanner summary={analysis.scanSummary} />}
 
       {!analysis.aiBriefing && mergeBlocked && (
         <Card className="ring-1 ring-border/60">
@@ -801,7 +1032,15 @@ function AnalysisReview({
         </CardHeader>
         <CardContent className="flex flex-wrap gap-2 text-sm text-muted-foreground">
           <Badge variant="secondary">{analysis.detectedSystem}</Badge>
-          <span>{analysis.rowCount} rows</span>
+          <Badge variant="outline" className="font-mono tabular-nums">
+            System {Math.round(analysis.systemConfidence * 100)}%
+          </Badge>
+          {analysis.scanSummary && (
+            <Badge variant="outline" className="font-mono tabular-nums">
+              Scan {Math.round(analysis.scanSummary.overallConfidence * 100)}%
+            </Badge>
+          )}
+          <span>{analysis.rowCount.toLocaleString()} rows</span>
           {opco && <span>Opco: {opco}</span>}
           {city && <span>City: {city}</span>}
           {sourceSystem && <span>System: {sourceSystem}</span>}
@@ -822,7 +1061,7 @@ function AnalysisReview({
               </tr>
             </thead>
             <tbody>
-              {UNIFIED_FIELDS.map(({ key, label, required }) => (
+              {FILE_COLUMN_FIELDS.map(({ key, label, required }) => (
                 <tr key={key} className="border-b border-border/50">
                   <td className="py-2 pr-4">
                     {label}
@@ -843,14 +1082,16 @@ function AnalysisReview({
                     </select>
                   </td>
                   <td className="py-2 font-mono text-xs text-muted-foreground">
-                    {analysis.columnConfidence[key]
-                      ? `${Math.round(analysis.columnConfidence[key] * 100)}%`
-                      : "—"}
+                    {renderMappingConfidence(analysis, key)}
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
+          <p className="mt-3 text-xs text-muted-foreground">
+            Operating company, city, and source system are set from the portfolio company picker — not mapped from file columns.
+            When Amount is not mapped, values are derived from Debit and Credit (standard for Exact/Yuki/Gilde exports).
+          </p>
         </CardContent>
       </Card>
 
@@ -894,7 +1135,7 @@ function AnalysisReview({
             <table className="w-full min-w-[600px] text-left text-xs">
               <thead>
                 <tr className="border-b border-border text-muted-foreground">
-                  {["date", "gl_account", "amount", "opco", "source_system", "gl_category"].map((h) => (
+                  {["date", "gl_account", "amount", "opco", "city", "source_system"].map((h) => (
                     <th key={h} className="px-2 py-2 font-medium uppercase">
                       {h}
                     </th>
@@ -904,7 +1145,7 @@ function AnalysisReview({
               <tbody>
                 {analysis.sampleNormalized.map((row, i) => (
                   <tr key={i} className="border-b border-border/50 font-mono">
-                    {["date", "gl_account", "amount", "opco", "source_system"].map((k) => (
+                    {["date", "gl_account", "amount", "opco", "city", "source_system"].map((k) => (
                       <td key={k} className="px-2 py-1.5">
                         {String(row[k] ?? "")}
                       </td>
@@ -997,6 +1238,27 @@ function Stat({ label, value, warn }: { label: string; value: string; warn?: boo
       </p>
     </div>
   );
+}
+
+function renderMappingConfidence(
+  analysis: UploadAnalysis,
+  key: keyof UploadAnalysis["columnMapping"],
+): string {
+  const mapped = analysis.columnMapping[key];
+  if (mapped) {
+    const conf = analysis.columnConfidence[key];
+    return conf ? `${Math.round(conf * 100)}%` : "—";
+  }
+  if (
+    key === "amount" &&
+    analysis.columnMapping.debit &&
+    analysis.columnMapping.credit
+  ) {
+    const deb = analysis.columnConfidence.debit ?? 1;
+    const cred = analysis.columnConfidence.credit ?? 1;
+    return `via debit/credit · ${Math.round(Math.min(deb, cred) * 100)}%`;
+  }
+  return "—";
 }
 
 function Meta({ label, value }: { label: string; value: string }) {

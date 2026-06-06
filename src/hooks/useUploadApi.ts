@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
-import type { UploadAnalysis, UnifiedStats } from "../types/upload";
+import type { UploadAnalysis, UnifiedStats, PortfolioCompany, IngestResult } from "../types/upload";
 
 export function useUploadApi() {
   const [aiAvailable, setAiAvailable] = useState(false);
+  const [companies, setCompanies] = useState<PortfolioCompany[]>([]);
   const [stats, setStats] = useState<UnifiedStats | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -16,13 +17,26 @@ export function useUploadApi() {
     }
   }, []);
 
+  const refreshCompanies = useCallback(async () => {
+    try {
+      const r = await fetch("/api/companies");
+      if (r.ok) {
+        const d = await r.json();
+        setCompanies(d.companies ?? []);
+      }
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
   useEffect(() => {
     fetch("/api/health")
       .then((r) => r.json())
       .then((d) => setAiAvailable(d.aiAvailable))
       .catch(() => setAiAvailable(false));
+    refreshCompanies();
     refreshStats();
-  }, [refreshStats]);
+  }, [refreshStats, refreshCompanies]);
 
   async function analyzeFile(
     file: File,
@@ -102,5 +116,36 @@ export function useUploadApi() {
     }
   }
 
-  return { aiAvailable, stats, loading, error, analyzeFile, confirmUpload, refreshStats };
+  async function ingestFile(file: File): Promise<IngestResult> {
+    setLoading(true);
+    setError(null);
+    const form = new FormData();
+    form.append("file", file);
+    try {
+      const r = await fetch("/api/upload/ingest", { method: "POST", body: form });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.detail ?? "Ingest failed");
+      if (data.merged) await refreshStats();
+      return data as IngestResult;
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Ingest failed";
+      setError(msg);
+      throw e;
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return {
+    aiAvailable,
+    companies,
+    stats,
+    loading,
+    error,
+    analyzeFile,
+    ingestFile,
+    confirmUpload,
+    refreshStats,
+    refreshCompanies,
+  };
 }

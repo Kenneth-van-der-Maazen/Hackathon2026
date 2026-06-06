@@ -7,6 +7,6 @@
     "wet": 425000,
     "dry": 540000
   },
-  "wetQuarterEarlyWeeksWorse": true,
-  "dryQuarterEarlyWeeksBetter": true
+  "wetQuarterEarlyWeeksWorse": false,
+  "dryQuarterEarlyWeeksBetter": false
 }

@@ -1,15 +1,1 @@
-Unified data — Altis Groep Cash Flow
-
-Total rows (master): 12210
-Opcos: 5
-Unmapped GL accounts: 0
-Typed stores: revenue, costs, overhead, ledger — see unified_*.csv
-Sign convention: outflows negative, inflows positive (EUR)
-Duplicates removed via hash key (date+gl+amount+project+source)
-
-Last upload: Altis dataset 2 (1).xlsx (3397 new rows)
-Routed: 3397 → revenue
-Source system: Gilde
-Opco: 
-AI summary: This file contains sales transactions from Altis dataset 2 covering September to December 2025. All entries are from journal 006 - Verkoop (Sales), showing mostly credit amounts with VAT, indicating r
-Warnings: 2 rows skipped (missing date, GL, or zero amount)
+Unified data — empty. Upload Excel/CSV via Data Ingest to populate.

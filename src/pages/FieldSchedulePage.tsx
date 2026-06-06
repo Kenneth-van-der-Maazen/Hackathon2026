@@ -16,22 +16,38 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
+import { forecastWeekLabel, forecastWindowLabel } from "@/lib/forecastWindow";
+import {
+  buildWeekDayForecast,
+  dayLabel,
+  ruleBasedDailyInsight,
+  scheduleWeekDates,
+  weekDatesFromStart,
+} from "@/lib/weatherDaily";
 import {
   MODE_COLORS,
   MODE_LABELS,
+  buildDaySchedulePlan,
+  buildFallbackSchedulePlan,
   buildSchedulePlan,
   type CrewNotification,
   type SiteWeekPlan,
   type WorkMode,
 } from "../lib/workSchedule";
-import { formatEuro } from "../lib/format";
-import type { ForecastData, ScenarioId, WeatherInsights, WipProject } from "../types";
+import type {
+  ForecastData,
+  WeatherDailyData,
+  WeatherInsights,
+  WipProject,
+} from "../types";
+
+type ScheduleViewMode = "week" | "day";
 
 interface Props {
   forecast: ForecastData;
   weatherInsights: WeatherInsights | null;
+  weatherDaily: WeatherDailyData | null;
   wip: WipProject[];
-  scenario: ScenarioId;
   loading: boolean;
 }
 
@@ -42,8 +58,29 @@ const MODE_ICON: Record<WorkMode, typeof Sun> = {
   stand_down: CloudRain,
 };
 
-export function FieldSchedulePage({ forecast, weatherInsights, wip, scenario, loading }: Props) {
+export function FieldSchedulePage({
+  forecast,
+  weatherInsights,
+  weatherDaily,
+  wip,
+  loading,
+}: Props) {
+  const meta = forecast.meta;
+  const horizonWeeks = meta?.weeks ?? weatherInsights?.horizonWeeks ?? 13;
+  const [scheduleView, setScheduleView] = useState<ScheduleViewMode>("week");
   const [selectedWeek, setSelectedWeek] = useState(1);
+  const scheduleAnchor = weatherDaily?.weekStart ?? weatherInsights?.weekStart ?? meta?.forecastStart;
+  const scheduleHorizonEnd = scheduleAnchor
+    ? (() => {
+        const d = new Date(`${scheduleAnchor}T12:00:00`);
+        d.setDate(d.getDate() + horizonWeeks * 7 - 1);
+        return d.toISOString().slice(0, 10);
+      })()
+    : meta?.forecastEnd;
+
+  const [selectedDate, setSelectedDate] = useState(
+    () => scheduleWeekDates(weatherDaily, weatherInsights, 1)[0] ?? "",
+  );
   const [aiBriefing, setAiBriefing] = useState<string | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
   const [notifications, setNotifications] = useState<CrewNotification[]>([]);
@@ -62,12 +99,62 @@ export function FieldSchedulePage({ forecast, weatherInsights, wip, scenario, lo
   const [waGroupsLoading, setWaGroupsLoading] = useState(false);
   const [selectedGroup, setSelectedGroup] = useState("");
 
-  const plan = useMemo(
-    () => buildSchedulePlan(weatherInsights, wip, selectedWeek),
-    [weatherInsights, wip, selectedWeek],
+  const hasWeather = Boolean(weatherInsights?.cities?.length);
+  const weekDayDates = useMemo(
+    () => scheduleWeekDates(weatherDaily, weatherInsights, selectedWeek),
+    [weatherDaily, weatherInsights, selectedWeek],
+  );
+  const weekDayForecast = useMemo(
+    () => buildWeekDayForecast(weatherDaily, scheduleAnchor, selectedWeek),
+    [weatherDaily, scheduleAnchor, selectedWeek],
   );
 
-  const weekForecast = forecast[scenario]?.find((w) => w.week === selectedWeek);
+  useEffect(() => {
+    const dates = scheduleWeekDates(weatherDaily, weatherInsights, selectedWeek);
+    if (dates.length && !dates.includes(selectedDate)) {
+      setSelectedDate(dates[0]);
+    }
+  }, [weatherDaily, weatherInsights, selectedWeek, selectedDate]);
+
+  const plan = useMemo(() => {
+    if (scheduleView === "day" && selectedDate && weatherDaily) {
+      const dayRows = weatherDaily.days.filter((d) => d.date === selectedDate);
+      if (dayRows.length) {
+        return buildDaySchedulePlan(dayRows, wip, selectedDate);
+      }
+    }
+    if (hasWeather) {
+      return buildSchedulePlan(weatherInsights, wip, selectedWeek);
+    }
+    return buildFallbackSchedulePlan(wip, selectedWeek, meta);
+  }, [scheduleView, selectedDate, weatherDaily, hasWeather, weatherInsights, wip, selectedWeek, meta]);
+
+  const dailyInsight = useMemo(
+    () =>
+      ruleBasedDailyInsight(
+        weekDayForecast,
+        `W${selectedWeek}`,
+        scheduleView === "day" ? selectedDate : undefined,
+      ),
+    [weekDayForecast, selectedWeek, scheduleView, selectedDate],
+  );
+
+  const horizonRangeLabel =
+    scheduleAnchor && scheduleHorizonEnd
+      ? `${dayLabel(scheduleAnchor)} – ${dayLabel(scheduleHorizonEnd)}`
+      : forecastWindowLabel(meta);
+
+  const selectedWeekRangeLabel = useMemo(() => {
+    if (weekDayDates.length >= 2) {
+      return `${dayLabel(weekDayDates[0])} – ${dayLabel(weekDayDates[weekDayDates.length - 1])}`;
+    }
+    if (weekDayDates.length === 1) {
+      return dayLabel(weekDayDates[0]);
+    }
+    return forecastWeekLabel(meta, selectedWeek);
+  }, [weekDayDates, meta, selectedWeek]);
+
+  const weekOfLabel = `Week ${selectedWeek} of ${horizonWeeks}`;
 
   const refreshNotifications = useCallback(async () => {
     try {
@@ -153,13 +240,16 @@ export function FieldSchedulePage({ forecast, weatherInsights, wip, scenario, lo
         body: JSON.stringify({
           sites: plan.sites,
           weatherSummary: weatherInsights?.summary ?? plan.summary,
+          dailyForecast: weekDayForecast,
+          viewMode: scheduleView,
+          selectedDate: scheduleView === "day" ? selectedDate : undefined,
         }),
       });
       const data = await r.json();
       if (!r.ok) throw new Error(data.detail ?? "AI briefing failed");
       setAiBriefing(data.briefing);
-    } catch (e) {
-      setAiBriefing(e instanceof Error ? e.message : "AI unavailable");
+    } catch {
+      setAiBriefing(dailyInsight);
     } finally {
       setAiLoading(false);
     }
@@ -207,7 +297,7 @@ export function FieldSchedulePage({ forecast, weatherInsights, wip, scenario, lo
     );
   }
 
-  if (!weatherInsights) {
+  if (!hasWeather && wip.length === 0 && !loading) {
     return (
       <Card className="ring-1 ring-border/60">
         <CardHeader>
@@ -216,8 +306,8 @@ export function FieldSchedulePage({ forecast, weatherInsights, wip, scenario, lo
             Field Schedule
           </CardTitle>
           <CardDescription>
-            No weather forecast loaded. Run{" "}
-            <code className="font-mono text-xs">npm run data:weather</code> then refresh.
+            Upload opco data first, then run{" "}
+            <code className="font-mono text-xs">npm run data:weather</code> for live rain/frost planning.
           </CardDescription>
         </CardHeader>
       </Card>
@@ -234,54 +324,213 @@ export function FieldSchedulePage({ forecast, weatherInsights, wip, scenario, lo
               Field Schedule
             </h1>
             <p className="mt-1 max-w-2xl text-sm text-text-muted">
-              Weather-aware crew planning from Open-Meteo + unified WIP. Outdoor work when dry;
-              indoor/alternate tasks when rain hits — with one-click crew chat alerts.
+              Weather forecast from Open-Meteo — pick a <strong className="font-medium text-text-primary">week</strong> or{" "}
+              <strong className="font-medium text-text-primary">day</strong> to see rain vs dry, generate an AI crew plan,
+              and send alerts via WhatsApp.
             </p>
           </div>
-          <div className="flex flex-wrap gap-2">
-            {[1, 2, 3, 4].map((w) => (
-              <Button
-                key={w}
+          <div className="flex flex-col items-end gap-2">
+            <div className="flex rounded-lg border border-border p-0.5 text-xs">
+              <button
                 type="button"
-                size="sm"
-                variant={selectedWeek === w ? "default" : "outline"}
-                onClick={() => setSelectedWeek(w)}
+                className={cn(
+                  "rounded-md px-3 py-1.5",
+                  scheduleView === "week" ? "bg-secondary text-foreground" : "text-muted-foreground",
+                )}
+                onClick={() => setScheduleView("week")}
               >
-                W{w}
-              </Button>
-            ))}
+                Week
+              </button>
+              <button
+                type="button"
+                className={cn(
+                  "rounded-md px-3 py-1.5",
+                  scheduleView === "day" ? "bg-secondary text-foreground" : "text-muted-foreground",
+                )}
+                onClick={() => setScheduleView("day")}
+              >
+                Day
+              </button>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex max-w-full gap-1 overflow-x-auto rounded-full border border-border bg-card p-1">
+              {Array.from({ length: horizonWeeks }, (_, i) => i + 1).map((w) => (
+                <Button
+                  key={w}
+                  type="button"
+                  size="sm"
+                  variant={selectedWeek === w ? "default" : "ghost"}
+                  className="h-7 shrink-0 px-2.5 text-xs"
+                  onClick={() => {
+                    setSelectedWeek(w);
+                    setScheduleView("week");
+                  }}
+                  title={scheduleAnchor ? weekDatesFromStart(scheduleAnchor, w)[0] : forecastWeekLabel(meta, w)}
+                >
+                  {scheduleAnchor
+                    ? new Date(`${weekDatesFromStart(scheduleAnchor, w)[0]}T12:00:00`).toLocaleDateString(
+                        "en-US",
+                        { month: "short", day: "numeric" },
+                      )
+                    : `W${w}`}
+                </Button>
+              ))}
+            </div>
+            </div>
           </div>
         </div>
+
+        {weekDayDates.length > 0 && (
+          <div className="flex flex-wrap gap-1.5">
+            {weekDayForecast.map((day) => (
+              <button
+                key={day.date}
+                type="button"
+                onClick={() => {
+                  setSelectedDate(day.date);
+                  setScheduleView("day");
+                }}
+                className={cn(
+                  "rounded-lg border px-3 py-2 text-left text-xs transition-colors",
+                  scheduleView === "day" && selectedDate === day.date
+                    ? "border-accent-teal bg-accent-teal/10 text-foreground"
+                    : "border-border bg-card text-muted-foreground hover:border-border-strong",
+                )}
+              >
+                <p className="font-medium">{day.weekday}</p>
+                <p className="mt-0.5 tabular-nums">
+                  {day.rainCities.length === 0 ? (
+                    <span className="text-emerald-400">Dry</span>
+                  ) : day.dryCities.length === 0 ? (
+                    <span className="text-amber-400">Rain</span>
+                  ) : (
+                    <span className="text-amber-300">Mixed</span>
+                  )}
+                </p>
+              </button>
+            ))}
+          </div>
+        )}
+
+        {!hasWeather && (
+          <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 px-4 py-3 text-sm text-amber-200/90">
+            Weather not loaded — showing WIP-based plans. Run{" "}
+            <code className="font-mono text-xs">npm run data:weather</code> then refresh for stoppage days
+            and rain alerts.
+          </div>
+        )}
 
         {/* Forecast + weather status strip */}
         <Card className="ring-1 ring-border/60">
           <CardContent className="flex flex-wrap divide-x divide-border-strong p-0">
             <StatusPill
               label="Weather source"
-              value={weatherInsights.source}
-              sub={weatherInsights.fetchedAt?.slice(0, 10) ?? "—"}
-            />
-            <StatusPill label="Horizon" value={`${weatherInsights.horizonWeeks} weeks`} />
-            <StatusPill
-              label={`Cash net W${selectedWeek}`}
-              value={weekForecast ? formatEuro(weekForecast.net) : "—"}
-              sub={scenario}
+              value={hasWeather ? weatherInsights!.source : "Not loaded"}
+              sub={weatherInsights?.fetchedAt?.slice(0, 10) ?? "run data:weather"}
             />
             <StatusPill
-              label="Stoppage days (all sites)"
+              label="13-week weather horizon"
+              value={horizonRangeLabel}
+              sub={`${horizonWeeks}-week Open-Meteo forecast`}
+            />
+            <StatusPill
+              label={scheduleView === "day" ? "Selected day" : "Selected week"}
+              value={
+                scheduleView === "day" && selectedDate
+                  ? dayLabel(selectedDate)
+                  : selectedWeekRangeLabel
+              }
+              sub={weekOfLabel}
+            />
+            <StatusPill
+              label={scheduleView === "day" ? "Day plan" : "Outdoor sites"}
+              value={
+                scheduleView === "day"
+                  ? plan?.sites.filter((s) => s.mode === "outdoor").length
+                    ? `${plan.sites.filter((s) => s.mode === "outdoor").length} outdoor`
+                    : "Indoor"
+                  : String(plan?.sites.filter((s) => s.mode === "outdoor").length ?? 0)
+              }
+              sub={
+                scheduleView === "day"
+                  ? `${plan?.sites.length ?? 0} sites`
+                  : `${plan?.sites.length ?? 0} sites · ${weekOfLabel.toLowerCase()}`
+              }
+            />
+            <StatusPill
+              label="Stoppage days"
               value={String(
-                weatherInsights.cities.reduce(
-                  (s, c) => s + (c.weekly.find((w) => w.week === selectedWeek)?.stoppageDays ?? 0),
-                  0,
-                ),
+                hasWeather
+                  ? weatherInsights!.cities.reduce(
+                      (s, c) => s + (c.weekly.find((w) => w.week === selectedWeek)?.stoppageDays ?? 0),
+                      0,
+                    )
+                  : 0,
               )}
-              accent="amber"
+              sub={`${weekOfLabel.toLowerCase()} · all sites`}
+              accent={hasWeather ? "amber" : undefined}
             />
           </CardContent>
         </Card>
 
         {plan && (
           <p className="text-sm text-text-muted">{plan.summary}</p>
+        )}
+
+        {weekDayForecast.length > 0 && (
+          <Card className="ring-1 ring-border/60">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium">
+                {scheduleView === "day"
+                  ? `${dayLabel(selectedDate)} — day forecast`
+                  : `${selectedWeekRangeLabel} — day-by-day rain outlook`}
+              </CardTitle>
+              <CardDescription className="text-xs whitespace-pre-wrap">{dailyInsight}</CardDescription>
+            </CardHeader>
+            <CardContent className="overflow-x-auto pt-0">
+              <table className="w-full min-w-[480px] text-xs">
+                <thead>
+                  <tr className="border-b border-border text-left text-text-subtle">
+                    <th className="pb-2 pr-3 font-medium">Day</th>
+                    {weatherInsights?.cities.map((c) => (
+                      <th key={c.city} className="pb-2 pr-3 font-medium">
+                        {c.city}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {weekDayForecast.map((row) => (
+                    <tr
+                      key={row.date}
+                      className={cn(
+                        "border-b border-border/40",
+                        scheduleView === "day" && selectedDate === row.date && "bg-accent-teal/5",
+                      )}
+                    >
+                      <td className="py-2 pr-3 font-medium">{row.label}</td>
+                      {weatherInsights?.cities.map((c) => {
+                        const cell = row.cities.find((x) => x.city === c.city);
+                        const rain = cell?.isStoppage;
+                        return (
+                          <td key={c.city} className="py-2 pr-3">
+                            {rain ? (
+                              <span className="text-amber-400">
+                                {cell?.rainfallMm ?? 0}mm
+                                {cell?.stoppageReasons?.length ? ` · ${cell.stoppageReasons.join("/")}` : ""}
+                              </span>
+                            ) : (
+                              <span className="text-emerald-400">Dry</span>
+                            )}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </CardContent>
+          </Card>
         )}
 
         {/* AI briefing */}
@@ -307,7 +556,9 @@ export function FieldSchedulePage({ forecast, weatherInsights, wip, scenario, lo
               </Button>
             </div>
             <CardDescription>
-              Claude reads this week&apos;s weather + site plan and drafts a group message.
+              {scheduleView === "day"
+                ? "Claude reads today's rain forecast per city and drafts a crew message."
+                : "Claude reads this week's day-by-day rain outlook and drafts a group message."}
             </CardDescription>
           </CardHeader>
           {aiBriefing && (

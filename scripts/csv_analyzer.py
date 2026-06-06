@@ -16,7 +16,8 @@ from unified_schema import GL_CATEGORIES, duplicate_stats, gl_category, load_gl_
 COLUMN_PATTERNS: dict[str, list[str]] = {
     "date": [
         "date", "datum", "boekingsdatum", "transaction_date", "txn_date",
-        "booking_date", "posting_date", "transactiedatum",
+        "booking_date", "posting_date", "transactiedatum", "factuurdatum",
+        "factuur datum", "periode",
     ],
     "gl_account": [
         "gl_account", "grootboek", "account", "account_code", "gb", "gl",
@@ -42,11 +43,39 @@ COLUMN_PATTERNS: dict[str, list[str]] = {
 }
 
 SYSTEM_HINTS: dict[str, list[str]] = {
-    "Gilde": ["gilde", "dakwerk"],
+    "Gilde": ["gilde", "dakwerk", "verkoopboek gilde"],
     "Yuki": ["yuki", "kostenplaats", "boekingsdatum", "grootboek", "bedrag"],
-    "Exact": ["exact", "debet", "credit", "gb-nummer", "memoriaal"],
+    "Exact": ["exact", "debet", "credit", "gb-nummer", "memoriaal", "dagboek", "bkst"],
     "Snelstart": ["snelstart", "dagboek"],
 }
+
+# Headers that look like GL but are journals / doc numbers / VAT
+NON_GL_HEADERS = frozenset({
+    "dagboek", "journal", "dagboekcode", "bkstnr", "bkst", "factuurnummer",
+    "document", "boekstuk", "docnr",
+})
+NON_AMOUNT_HEADERS = frozenset({
+    "btwbedrag", "btw", "vat", "vatamount", "belasting", "btwnr",
+})
+# Never map opco/city from transaction text columns
+NON_CONTEXT_HEADERS = frozenset({
+    "description", "journal", "dagboek", "omschrijving", "memo", "documentno",
+    "invoice_no", "factuurnummer", "bkstnr", "sourcesheet", "amount", "debit",
+    "credit", "date", "glaccount",
+})
+
+JOURNAL_GL_HINTS: list[tuple[str, str]] = [
+    ("verkoop", "8000"),
+    ("verkoopboek", "8000"),
+    ("omzet", "8000"),
+    ("inkoop", "4000"),
+    ("memoriaal", "9000"),
+    ("mem", "9000"),
+    ("bank", "9000"),
+    ("kas", "9000"),
+    ("crediteur", "5000"),
+    ("debiteur", "8000"),
+]
 
 
 @dataclass
@@ -119,6 +148,8 @@ class AnalysisResult:
     file_type: str = "csv"
     duplicate_check: dict | None = None
     store_routing: dict | None = None
+    workbook_profile: dict | None = None
+    dataset_profile: dict | None = None
 
     def to_dict(self) -> dict:
         out = {
@@ -146,11 +177,211 @@ class AnalysisResult:
             out["duplicateCheck"] = self.duplicate_check
         if self.store_routing:
             out["storeRouting"] = self.store_routing
+        if self.workbook_profile:
+            out["workbookProfile"] = self.workbook_profile
+        if self.dataset_profile:
+            out["datasetProfile"] = self.dataset_profile
         return out
 
 
 def _norm_header(h: str) -> str:
     return re.sub(r"[^a-z0-9]", "", h.lower().strip())
+
+
+# Raw export labels → canonical merged CSV headers (multi-sheet xlsx)
+HEADER_ALIASES: dict[str, str] = {
+    "datum": "date",
+    "factuurdatum": "date",
+    "boekingsdatum": "date",
+    "debet": "debit",
+    "debetbedrag": "debit",
+    "credit": "credit",
+    "creditbedrag": "credit",
+    "bedrag": "amount",
+    "factuurbedrag": "amount",
+    "dagboek": "journal",
+    "omschrijving": "description",
+    "bkstnr": "document_no",
+    "factuurnummer": "invoice_no",
+    "grootboek": "gl_account",
+    "grootboekrekening": "gl_account",
+    "btwbedrag": "amount",
+}
+
+
+def resolve_header(name: str | None, headers: list[str]) -> str | None:
+    """Map AI/heuristic column name to an actual header in the file."""
+    if not name:
+        return None
+    if name in headers:
+        return name
+
+    header_by_norm = {_norm_header(h): h for h in headers}
+    norm = _norm_header(name)
+    if norm in header_by_norm:
+        return header_by_norm[norm]
+
+    for h in headers:
+        if norm in _norm_header(h) or _norm_header(h) in norm:
+            return h
+
+    alias = HEADER_ALIASES.get(norm)
+    if alias and alias in headers:
+        return alias
+    if alias and alias in header_by_norm:
+        return header_by_norm[alias]
+
+    return None
+
+
+def apply_ai_column_mapping(
+    mapping: ColumnMapping,
+    ai_mapping: dict[str, str | None],
+    headers: list[str],
+) -> list[str]:
+    """Apply AI mapping only when columns resolve to real headers."""
+    notes: list[str] = []
+    skip_fields = {"opco", "city", "project_id", "source_system"}
+    for field_name, raw in ai_mapping.items():
+        if field_name in skip_fields:
+            continue
+        if field_name not in ColumnMapping.__dataclass_fields__ or not raw:
+            continue
+        resolved = resolve_header(raw, headers)
+        if resolved:
+            setattr(mapping, field_name, resolved)
+        else:
+            notes.append(f"AI mapped {field_name}→'{raw}' ignored (not in merged headers)")
+    return notes
+
+
+def journal_to_gl(journal_text: str) -> str:
+    text = journal_text.lower()
+    for hint, gl in JOURNAL_GL_HINTS:
+        if hint in text:
+            return gl
+    m = re.search(r"\b([489]\d{3})\b", journal_text)
+    if m:
+        return m.group(1)
+    return ""
+
+
+def scan_column_dates(headers: list[str], rows: list[dict[str, str]]) -> tuple[str | None, dict[str, int]]:
+    """Find column with most parseable dates; return column name + year counts."""
+    from unified_schema import parse_date
+
+    best_col: str | None = None
+    best_count = 0
+    best_years: dict[str, int] = {}
+
+    for h in headers:
+        years: dict[str, int] = {}
+        parsed = 0
+        for row in rows[:2000]:
+            val = (row.get(h) or "").strip()
+            if not val:
+                continue
+            try:
+                iso = parse_date(val)
+                parsed += 1
+                years[iso[:4]] = years.get(iso[:4], 0) + 1
+            except ValueError:
+                continue
+        if parsed > best_count:
+            best_count = parsed
+            best_col = h
+            best_years = years
+
+    return best_col, best_years
+
+
+def refine_column_mapping(
+    mapping: ColumnMapping,
+    headers: list[str],
+    rows: list[dict[str, str]],
+) -> tuple[ColumnMapping, dict[str, float], list[str]]:
+    """Fix common mis-maps (Dagboek as GL, BTW as amount) and infer dates by content."""
+    confidence: dict[str, float] = {}
+    notes: list[str] = []
+
+    if mapping.gl_account and _norm_header(mapping.gl_account) in NON_GL_HEADERS:
+        notes.append(f"Removed '{mapping.gl_account}' as GL — journal/doc column, not ledger code")
+        mapping.gl_account = None
+
+    if mapping.source_system and _norm_header(mapping.source_system) in {"sourcesheet", "sheet", "sourcesheetname"}:
+        mapping.source_system = None
+
+    for ctx_field in ("opco", "city", "project_id", "source_system"):
+        col = getattr(mapping, ctx_field)
+        if col and _norm_header(col) in NON_CONTEXT_HEADERS:
+            notes.append(f"Removed {ctx_field}→'{col}' — set via company registry, not file column")
+            setattr(mapping, ctx_field, None)
+
+    if mapping.amount and _norm_header(mapping.amount) in NON_AMOUNT_HEADERS:
+        notes.append(f"Removed '{mapping.amount}' as amount — VAT column, using debit/credit instead")
+        mapping.amount = None
+
+    if mapping.debit and mapping.credit:
+        mapping.amount = None
+        confidence.pop("amount", None)
+
+    if not mapping.date and rows:
+        inferred, years = scan_column_dates(headers, rows)
+        if inferred:
+            mapping.date = inferred
+            confidence["date"] = 0.95
+            year_list = ", ".join(f"{y} ({c})" for y, c in sorted(years.items()))
+            notes.append(f"Date column inferred by content: '{inferred}' — years: {year_list}")
+
+    if not mapping.description:
+        for candidate in ("description", "journal", "dagboek", "omschrijving", "memo"):
+            col = next((h for h in headers if _norm_header(h) == _norm_header(candidate)), None)
+            if col:
+                mapping.description = col
+                confidence["description"] = 0.8
+                break
+
+    if not mapping.gl_account and mapping.description and rows:
+        sample = next((r.get(mapping.description, "") for r in rows if r.get(mapping.description)), "")
+        gl = journal_to_gl(sample)
+        if gl:
+            notes.append(f"GL inferred from journal/description → {gl}")
+
+    return mapping, confidence, notes
+
+
+def build_dataset_profile(rows: list[dict[str, str]], mapping: ColumnMapping) -> dict:
+    from unified_schema import parse_date
+
+    years: dict[str, int] = {}
+    dates: list[str] = []
+    sheets: dict[str, int] = {}
+
+    date_col = mapping.date
+    for row in rows:
+        sheet = row.get("source_sheet", "")
+        if sheet:
+            sheets[sheet] = sheets.get(sheet, 0) + 1
+        if not date_col:
+            continue
+        val = (row.get(date_col) or "").strip()
+        if not val:
+            continue
+        try:
+            iso = parse_date(val)
+            dates.append(iso)
+            years[iso[:4]] = years.get(iso[:4], 0) + 1
+        except ValueError:
+            continue
+
+    dates.sort()
+    return {
+        "rowCount": len(rows),
+        "dateRange": {"start": dates[0] if dates else None, "end": dates[-1] if dates else None},
+        "yearBreakdown": years,
+        "rowsBySheet": sheets,
+        "hasDates": bool(dates),
+    }
 
 
 def detect_columns(headers: list[str]) -> tuple[ColumnMapping, dict[str, float]]:
@@ -237,8 +468,12 @@ def normalize_row(
 
         gl_col = mapping.gl_account
         gl = _cell(row, gl_col) if gl_col else ""
-        if not gl and mapping.debit:
-            gl = "0000"
+        if not gl:
+            gl = _cell(row, "gl_account")
+        if not gl and mapping.description:
+            gl = journal_to_gl(_cell(row, mapping.description))
+        if not gl:
+            gl = "8000" if defaults.get("source_system", "").lower() in ("exact", "gilde") else "0000"
         if not gl:
             return None
 
@@ -256,11 +491,17 @@ def normalize_row(
             return None
 
         desc = _cell(row, mapping.description) or "Imported transaction"
-        opco = _cell(row, mapping.opco) or defaults.get("opco", "Unknown Opco")
-        opco = opco.replace("_", " ")
-        project = _cell(row, mapping.project_id) or defaults.get("project_id", "PRJ-UNK-001")
-        source = _cell(row, mapping.source_system) or defaults.get("source_system", "Unknown")
-        city = _cell(row, mapping.city) or defaults.get("city", "")
+
+        # Opco / city / source come from upload context (company registry) — never from row columns
+        opco = defaults.get("opco", "Unknown Opco")
+        city = defaults.get("city", "")
+        source = defaults.get("source_system", "Unknown")
+        project = defaults.get("project_id") or (
+            f"PRJ-{city.upper().replace(' ', '')}-001" if city else "PRJ-UNK-001"
+        )
+
+        if not opco or opco == "Unknown Opco":
+            return None
 
         return {
             "date": txn_date,
@@ -325,6 +566,7 @@ def analyze_csv(
     ai_enhancement: dict | None = None,
     file_type: str = "csv",
     sheet_name: str | None = None,
+    workbook_profile: dict | None = None,
 ) -> AnalysisResult:
     defaults = defaults or {}
     headers, all_rows = read_csv_content(content, max_rows=None)
@@ -337,12 +579,23 @@ def analyze_csv(
         if not defaults.get("city") and brief.get("recommendedCity"):
             defaults["city"] = brief["recommendedCity"]
 
+    if workbook_profile:
+        if not defaults.get("opco") and workbook_profile.get("opcoHint"):
+            defaults["opco"] = workbook_profile["opcoHint"]
+        if not defaults.get("city") and workbook_profile.get("cityHint"):
+            defaults["city"] = workbook_profile["cityHint"]
+
     mapping, col_conf = detect_columns(headers)
+    mapping, refine_conf, refine_notes = refine_column_mapping(mapping, headers, all_rows)
+    col_conf.update(refine_conf)
+    ai_map_notes: list[str] = []
     if ai_enhancement and ai_enhancement.get("column_mapping"):
-        for k, v in ai_enhancement["column_mapping"].items():
-            if v and k in ColumnMapping.__dataclass_fields__:
-                setattr(mapping, k, v)
-                col_conf[k] = max(col_conf.get(k, 0), 0.9)
+        ai_map_notes = apply_ai_column_mapping(
+            mapping, ai_enhancement["column_mapping"], headers
+        )
+
+    mapping, refine_conf2, refine_notes2 = refine_column_mapping(mapping, headers, all_rows)
+    col_conf.update(refine_conf2)
 
     detected_system, sys_conf = detect_system(headers, sample_rows)
     if ai_enhancement and ai_enhancement.get("detected_system"):
@@ -352,9 +605,18 @@ def analyze_csv(
     if not defaults.get("source_system") and detected_system != "Unknown":
         defaults["source_system"] = detected_system
 
-    warnings: list[str] = []
+    warnings: list[str] = list(refine_notes) + list(ai_map_notes) + list(refine_notes2)
+    if workbook_profile and len(workbook_profile.get("mergedSheets", [])) > 1:
+        sheets = workbook_profile.get("mergedSheets", [])
+        years = workbook_profile.get("yearBreakdown", {})
+        year_txt = ", ".join(f"{y}: {c}" for y, c in sorted(years.items()))
+        warnings.append(
+            f"Multi-sheet workbook — merged {len(sheets)} tabs ({', '.join(sheets)}). Years: {year_txt or 'see profile'}"
+        )
     if not mapping.date:
         warnings.append("Could not detect date column — please map manually")
+    if not defaults.get("opco"):
+        warnings.append("Select a portfolio company before merging — opco is not read from file columns")
     if not mapping.gl_account and not (mapping.debit and mapping.credit):
         warnings.append("Could not detect GL or debit/credit columns")
     if not mapping.amount and not (mapping.debit and mapping.credit):
@@ -380,6 +642,11 @@ def analyze_csv(
     store_routing = resolve_store_routing(filename, normalized, ai_type, ai_target, gl_map)
     dup_check = duplicate_stats(normalized, store_routing)
 
+    dataset_profile = build_dataset_profile(all_rows, mapping)
+    if dataset_profile.get("hasDates") and ai_briefing:
+        ai_briefing = dict(ai_briefing)
+        ai_briefing["dateRange"] = dataset_profile["dateRange"]
+
     if dup_check["blockMerge"]:
         warnings.append(dup_check["message"])
     elif dup_check["duplicateRows"] > 0:
@@ -404,4 +671,6 @@ def analyze_csv(
         file_type=file_type,
         duplicate_check=dup_check,
         store_routing=store_routing,
+        workbook_profile=workbook_profile,
+        dataset_profile=dataset_profile,
     )

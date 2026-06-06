@@ -1,10 +1,13 @@
 export type ScenarioId = "base" | "wet" | "dry";
 
-export type RoleId = "cfo" | "opco" | "data" | "portfolio" | "schedule";
+export type RoleId = "cfo" | "data" | "portfolio" | "schedule";
 
 export interface WeekForecast {
   week: number;
   label: string;
+  weekStart?: string;
+  weekEnd?: string;
+  chartLabel?: string;
   materials: number;
   subcontractors: number;
   milestoneBilling: number;
@@ -13,7 +16,92 @@ export interface WeekForecast {
   net: number;
 }
 
+export interface ForecastMeta {
+  weeks: number;
+  forecastStart: string;
+  forecastEnd: string;
+  anchoredTo: string;
+  dataMinDate?: string;
+  dataMaxDate?: string;
+  rowsInWindow: number;
+  totalRows: number;
+  editable: boolean;
+  anchorNote: string;
+  selectionReason?: string;
+  stoppageDays?: number;
+  totalRainfallMm?: number;
+  rainDays?: number;
+  weatherCities?: string[];
+}
+
+export interface ScenarioWindowPick {
+  anchorEnd: string;
+  forecastStart: string;
+  forecastEnd: string;
+  rowsInWindow: number;
+  stoppageDays: number;
+  totalRainfallMm: number;
+  rainDays: number;
+  score: number;
+  cities: string[];
+  selectionReason: string;
+}
+
+export interface UnifiedRangeSummary {
+  start: string;
+  end: string;
+  rowCount: number;
+  billing: number;
+  materials: number;
+  subcontractors: number;
+  overhead: number;
+  unmapped: number;
+  net: number;
+  byOpco: Record<string, number>;
+  series?: Array<{ date: string; billing: number; net: number }>;
+}
+
+export interface UnifiedDayTotals {
+  date: string;
+  rowCount: number;
+  billing: number;
+  materials: number;
+  subcontractors: number;
+  overhead: number;
+  unmapped: number;
+  net: number;
+  opcos?: Record<
+    string,
+    {
+      rowCount: number;
+      billing: number;
+      materials: number;
+      subcontractors: number;
+      overhead: number;
+      unmapped: number;
+      net: number;
+    }
+  >;
+}
+
+export interface UnifiedTimeseries {
+  source: string;
+  dataMinDate: string | null;
+  dataMaxDate: string | null;
+  totalRows: number;
+  opcos?: string[];
+  days: UnifiedDayTotals[];
+}
+
+export type DashboardViewMode = "actuals" | "forecast";
+
 export interface ForecastData {
+  meta?: ForecastMeta;
+  scenarioMeta?: Partial<Record<ScenarioId, ForecastMeta>>;
+  scenarioWindows?: {
+    wet: Record<string, ScenarioWindowPick>;
+    dry: Record<string, ScenarioWindowPick>;
+  };
   base: WeekForecast[];
   wet: WeekForecast[];
   dry: WeekForecast[];
@@ -142,4 +230,20 @@ export interface WeatherInsights {
   summary: string;
   topHighlights: string[];
   cities: WeatherCityInsights[];
+}
+
+export interface WeatherDailyDay {
+  date: string;
+  city: string;
+  rainfallMm: number;
+  tempMinC: number;
+  tempMaxC: number;
+  stoppageReasons: string[];
+  isStoppage: boolean;
+}
+
+export interface WeatherDailyData {
+  weekStart: string;
+  horizonWeeks: number;
+  days: WeatherDailyDay[];
 }

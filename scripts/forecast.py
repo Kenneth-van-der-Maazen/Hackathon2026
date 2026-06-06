@@ -12,6 +12,8 @@ from pathlib import Path
 
 from paths import data_path
 from portfolio_stats import write_portfolio_stats
+from scenario_windows import build_scenario_index
+from unified_range import write_unified_timeseries
 
 ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / "data" / "output"
@@ -41,8 +43,34 @@ class TraceRecord:
     source_description: str = ""
 
 
-def load_unified() -> tuple[list[dict], date]:
-    """Load rows from unified_data.csv; anchor 13-week window to latest data in DB."""
+def forecast_meta(
+    forecast_start: date,
+    latest: date,
+    rows_in_window: int,
+    total_rows: int,
+    data_min: date,
+    data_max: date,
+) -> dict:
+    last_day = forecast_start + timedelta(weeks=WEEKS) - timedelta(days=1)
+    return {
+        "weeks": WEEKS,
+        "forecastStart": forecast_start.isoformat(),
+        "forecastEnd": last_day.isoformat(),
+        "anchoredTo": latest.isoformat(),
+        "dataMinDate": data_min.isoformat(),
+        "dataMaxDate": data_max.isoformat(),
+        "rowsInWindow": rows_in_window,
+        "totalRows": total_rows,
+        "editable": True,
+        "anchorNote": (
+            "13-week forecast window. Pick any end date within your unified database "
+            "to rebuild the forecast, or choose a range to view actual income."
+        ),
+    }
+
+
+def load_unified(anchor_end: date | None = None) -> tuple[list[dict], date, date, int, date, date]:
+    """Load rows from unified_data.csv; anchor 13-week window to anchor_end or latest txn."""
     raw: list[dict] = []
     with (OUT / "unified_data.csv").open(encoding="utf-8") as f:
         for row in csv.DictReader(f):
@@ -51,9 +79,15 @@ def load_unified() -> tuple[list[dict], date]:
             raw.append(row)
 
     if not raw:
-        return [], START
+        return [], START, START, 0, START, START
 
-    latest = max(r["txn_date"] for r in raw)
+    data_min = min(r["txn_date"] for r in raw)
+    data_max = max(r["txn_date"] for r in raw)
+    latest = anchor_end if anchor_end is not None else data_max
+    if latest < data_min:
+        latest = data_min
+    if latest > data_max:
+        latest = data_max
     forecast_start = latest - timedelta(weeks=WEEKS - 1)
     forecast_start = forecast_start - timedelta(days=forecast_start.weekday())
 
@@ -66,7 +100,7 @@ def load_unified() -> tuple[list[dict], date]:
         row["week"] = min(WEEKS, max(1, (d - forecast_start).days // 7 + 1))
         rows.append(row)
 
-    return rows, forecast_start
+    return rows, forecast_start, latest, len(raw), data_min, data_max
 
 
 def load_weather_by_city() -> dict[str, dict[int, float]]:
@@ -148,8 +182,19 @@ def opco_segments(unified: list[dict]) -> dict[str, str]:
     }
 
 
-def empty_weeks() -> list[dict]:
-    return [{
+def annotate_week_dates(weeks: list[dict], forecast_start: date) -> None:
+    for w in weeks:
+        idx = int(w["week"]) - 1
+        ws = forecast_start + timedelta(weeks=idx)
+        we = ws + timedelta(days=6)
+        w["weekStart"] = ws.isoformat()
+        w["weekEnd"] = we.isoformat()
+        w["chartLabel"] = ws.strftime("%b %d")
+
+
+def empty_weeks(forecast_start: date | None = None) -> list[dict]:
+    start = forecast_start or START
+    weeks = [{
         "week": w,
         "label": f"W{w}",
         "materials": 0.0,
@@ -159,6 +204,8 @@ def empty_weeks() -> list[dict]:
         "weatherImpact": 0.0,
         "net": 0.0,
     } for w in range(1, WEEKS + 1)]
+    annotate_week_dates(weeks, start)
+    return weeks
 
 
 def build_materials(unified: list[dict], weeks: list[dict], traces: list[TraceRecord], scenario: str) -> None:
@@ -292,8 +339,9 @@ def build_scenario(
     weather_by_city: dict[str, dict[int, float]],
     base_delay: dict[int, float],
     scenario: str,
+    forecast_start: date,
 ) -> tuple[list[dict], list[TraceRecord]]:
-    weeks = empty_weeks()
+    weeks = empty_weeks(forecast_start)
     traces: list[TraceRecord] = []
     build_materials(unified, weeks, traces, scenario)
     build_subcontractors(unified, weeks, traces, scenario)
@@ -373,7 +421,8 @@ def build_covenant_summary(forecast: dict, covenant: dict) -> dict:
     base = forecast["base"]
     dry = forecast["dry"]
     headroom_by_scenario = {}
-    for key, weeks in forecast.items():
+    for key in ("base", "wet", "dry"):
+        weeks = forecast[key]
         cumulative = sum(w["net"] for w in weeks)
         projected_increase = max(0, -cumulative * 0.08)
         headroom = covenant["headroom_threshold_eur"] - projected_increase
@@ -413,35 +462,160 @@ def trace_to_dict(t: TraceRecord) -> dict:
     }
 
 
-def main() -> None:
-    unified, forecast_start = load_unified()
-    if not unified:
-        print("No unified data — run data:pipeline or upload via Data Ingest first.")
-        return
-
-    print(f"Forecast window: {forecast_start.isoformat()} (+13 weeks), {len(unified):,} rows")
-
-    weather_by_city = load_weather_by_city()
-    base_delay = load_weather()
+def write_empty_outputs() -> None:
+    """Clear forecast/trace/WIP/portfolio when unified DB has no rows."""
     covenant = load_covenant()
-    segments = opco_segments(unified)
+    empty_meta = forecast_meta(START, START, 0, 0, START, START)
+    empty_meta["anchorNote"] = "No upload data yet — window will anchor to your latest transaction after ingest."
+    empty_forecast = {
+        "meta": empty_meta,
+        "base": empty_weeks(),
+        "wet": empty_weeks(),
+        "dry": empty_weeks(),
+    }
+    covenant_summary = build_covenant_summary(empty_forecast, covenant)
+    write_portfolio_stats([])
+    write_unified_timeseries()
 
-    forecast: dict[str, list] = {}
-    all_traces: list[dict] = []
-
-    for scenario in ("base", "wet", "dry"):
-        weeks, traces = build_scenario(unified, segments, weather_by_city, base_delay, scenario)
-        forecast[scenario] = weeks
-        all_traces.extend(trace_to_dict(t) for t in traces)
-
-    wip = build_wip_from_unified(unified, weather_by_city, base_delay)
-    covenant_summary = build_covenant_summary(forecast, covenant)
-    write_portfolio_stats()
+    empty_weather = {
+        "fetchedAt": None,
+        "source": "Open-Meteo",
+        "timezone": "Europe/Amsterdam",
+        "horizonWeeks": 13,
+        "weekStart": None,
+        "summary": "No weather data yet — run npm run data:weather after adding opco locations",
+        "topHighlights": [],
+        "cities": [],
+    }
 
     OUT.mkdir(parents=True, exist_ok=True)
     PUBLIC.mkdir(parents=True, exist_ok=True)
 
-    payload = {"base": forecast["base"], "wet": forecast["wet"], "dry": forecast["dry"]}
+    (OUT / "forecast.json").write_text(json.dumps(empty_forecast, indent=2), encoding="utf-8")
+    (OUT / "trace_data.json").write_text("[]\n", encoding="utf-8")
+    (OUT / "wip_data.json").write_text("[]\n", encoding="utf-8")
+    (OUT / "covenant_summary.json").write_text(json.dumps(covenant_summary, indent=2), encoding="utf-8")
+    (OUT / "weather_insights.json").write_text(json.dumps(empty_weather, indent=2), encoding="utf-8")
+
+    for name in (
+        "forecast.json", "trace_data.json", "wip_data.json",
+        "covenant_summary.json", "portfolio_stats.json", "weather_insights.json",
+    ):
+        src = OUT / name
+        if src.exists():
+            (PUBLIC / name).write_text(src.read_text(encoding="utf-8"), encoding="utf-8")
+
+
+def main() -> None:
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Build 13-week cash flow forecast from unified_data.csv")
+    parser.add_argument(
+        "--anchor-end",
+        type=str,
+        default=None,
+        help="End date (YYYY-MM-DD) to anchor the 13-week forecast window",
+    )
+    args = parser.parse_args()
+    anchor_end = date.fromisoformat(args.anchor_end) if args.anchor_end else None
+
+    # Load raw rows once for scenario window indexing
+    raw_rows: list[dict] = []
+    with (OUT / "unified_data.csv").open(encoding="utf-8") as f:
+        for row in csv.DictReader(f):
+            row["amount"] = float(row["amount"])
+            row["txn_date"] = date.fromisoformat(row["date"])
+            raw_rows.append(row)
+
+    if not raw_rows:
+        print("No unified data — run data:pipeline or upload via Data Ingest first.")
+        write_empty_outputs()
+        return
+
+    data_min = min(r["txn_date"] for r in raw_rows)
+    data_max = max(r["txn_date"] for r in raw_rows)
+    total_rows = len(raw_rows)
+    scenario_index = build_scenario_index(raw_rows)
+
+    weather_by_city = load_weather_by_city()
+    base_delay = load_weather()
+    covenant = load_covenant()
+
+    forecast: dict[str, list] = {}
+    scenario_meta: dict[str, dict] = {}
+    all_traces: list[dict] = []
+
+    for scenario in ("base", "wet", "dry"):
+        if scenario == "base":
+            scen_anchor = anchor_end
+        else:
+            pick = scenario_index[scenario]["all"]
+            scen_anchor = date.fromisoformat(pick["anchorEnd"])
+
+        unified, forecast_start, latest, _, _, _ = load_unified(scen_anchor)
+        if not unified:
+            continue
+
+        segments = opco_segments(unified)
+        weeks, traces = build_scenario(
+            unified, segments, weather_by_city, base_delay, scenario, forecast_start,
+        )
+        forecast[scenario] = weeks
+        all_traces.extend(trace_to_dict(t) for t in traces)
+
+        meta = forecast_meta(forecast_start, latest, len(unified), total_rows, data_min, data_max)
+        if scenario == "base":
+            meta["anchorNote"] = (
+                "13-week forecast window anchored to your latest transaction. "
+                "Wet/Dry Quarter auto-select the wettest or driest 13-week period in your data."
+            )
+        else:
+            pick = scenario_index[scenario]["all"]
+            meta.update({
+                "selectionReason": pick.get("selectionReason"),
+                "stoppageDays": pick.get("stoppageDays"),
+                "totalRainfallMm": pick.get("totalRainfallMm"),
+                "rainDays": pick.get("rainDays"),
+                "weatherCities": pick.get("cities"),
+            })
+        scenario_meta[scenario] = meta
+
+        if scenario == "base":
+            print(
+                f"Forecast window ({scenario}): {forecast_start.isoformat()} – "
+                f"{(forecast_start + timedelta(weeks=WEEKS) - timedelta(days=1)).isoformat()} "
+                f"(anchored to {latest.isoformat()}), {len(unified):,} rows in window"
+            )
+        else:
+            print(
+                f"Forecast window ({scenario}): {forecast_start.isoformat()} – "
+                f"{(forecast_start + timedelta(weeks=WEEKS) - timedelta(days=1)).isoformat()} "
+                f"— {pick.get('selectionReason', '')[:80]}"
+            )
+
+    if not forecast.get("base"):
+        print("No rows in base forecast window.")
+        write_empty_outputs()
+        return
+
+    wip = build_wip_from_unified(
+        load_unified(anchor_end)[0], weather_by_city, base_delay,
+    )
+    covenant_summary = build_covenant_summary(forecast, covenant)
+    write_portfolio_stats()
+    write_unified_timeseries()
+
+    OUT.mkdir(parents=True, exist_ok=True)
+    PUBLIC.mkdir(parents=True, exist_ok=True)
+
+    payload = {
+        "meta": scenario_meta["base"],
+        "scenarioMeta": scenario_meta,
+        "scenarioWindows": scenario_index,
+        "base": forecast["base"],
+        "wet": forecast["wet"],
+        "dry": forecast["dry"],
+    }
     (OUT / "forecast.json").write_text(json.dumps(payload, indent=2), encoding="utf-8")
     (OUT / "trace_data.json").write_text(json.dumps(all_traces, indent=2), encoding="utf-8")
     (OUT / "wip_data.json").write_text(json.dumps(wip, indent=2), encoding="utf-8")

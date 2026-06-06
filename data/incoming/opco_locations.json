@@ -8,7 +8,46 @@
     "lng": 5.571,
     "source_system": "Exact",
     "data_folder": "portfolio company data",
-    "notes": "GB 8000/8001/8002 transaction exports \u2014 location not in source files, mapped by data owner"
+    "filename_patterns": [
+      "heeze",
+      "portfolio company data",
+      "portfolio company data heeze"
+    ],
+    "notes": "GB 8000/8001/8002 transaction exports — Exact",
+    "ingest_profile": {
+      "trained": true,
+      "auto_merge": true,
+      "confidence": 1.0,
+      "parser": "exact_gb_export",
+      "format_name": "Exact GB export (GL · date · debit/credit)",
+      "file_types": [
+        "xlsx"
+      ],
+      "data_type": "revenue",
+      "target_store": "revenue",
+      "store_reason": "GB 8xxx Omzet lines from Exact export",
+      "detected_system": "Exact",
+      "column_mapping": {
+        "date": "date",
+        "gl_account": "gl_account",
+        "debit": "debit",
+        "credit": "credit",
+        "description": "description"
+      },
+      "default_gl_categories": {
+        "8000": "billing",
+        "8001": "billing",
+        "8002": "billing"
+      },
+      "auto_approve_gl": true,
+      "summary": "Portfolio Company Heeze — Exact GB export with GL account in col A, booking date col C, debit/credit cols F/G. Revenue (8xxx) routes to billing store.",
+      "quality_checks": [
+        "Trained format — no manual mapping required",
+        "GL prefix 8xxx → milestone billing",
+        "Location fixed: Heeze (not in source file)"
+      ],
+      "controller_question": "Merge Heeze Exact GB export into central database?"
+    }
   },
   {
     "opco_id": "OPCO-BRUNSSUM",
@@ -19,7 +58,42 @@
     "lng": 5.97,
     "source_system": "Yuki",
     "data_folder": "portfolio company 2 data",
-    "notes": "FinTransactions exports \u2014 Brunssum opco per data owner"
+    "filename_patterns": [
+      "brunssum",
+      "portfolio company 2",
+      "ummels",
+      "yuki"
+    ],
+    "notes": "Yuki FinTransactions — Brunssum opco",
+    "ingest_profile": {
+      "trained": true,
+      "auto_merge": true,
+      "confidence": 1.0,
+      "parser": "yuki_fintransactions",
+      "format_name": "Yuki FinTransactions (Grootboekrekening header)",
+      "file_types": [
+        "xlsx"
+      ],
+      "data_type": "mixed",
+      "target_store": "mixed",
+      "store_reason": "Yuki journal spans GL 4/5/8/9 — split by account on merge",
+      "detected_system": "Yuki",
+      "column_mapping": {
+        "date": "date",
+        "gl_account": "gl_account",
+        "debit": "debit",
+        "credit": "credit",
+        "description": "description"
+      },
+      "auto_approve_gl": true,
+      "summary": "Brunssum / Peter Ummels — Yuki FinTransactions export. GL code in sheet header (Grootboekrekening), Nr./Datum/Debet/Credit columns.",
+      "quality_checks": [
+        "Trained Yuki parser — reads GL from sheet header",
+        "Mixed GL types split into typed stores on merge",
+        "Location fixed: Brunssum"
+      ],
+      "controller_question": "Merge Brunssum Yuki transactions into central database?"
+    }
   },
   {
     "opco_id": "OPCO-ANDIJK",
@@ -29,8 +103,42 @@
     "lat": 52.745,
     "lng": 5.22,
     "source_system": "Gilde",
-    "data_folder": "datasets/Altis dataset 1.xlsx",
-    "notes": "Monthly P&L workbook \u2014 Andijk label on 2026YTD sheet"
+    "data_folder": "Altis dataset 1",
+    "filename_patterns": [
+      "andijk",
+      "altis dataset 1"
+    ],
+    "notes": "Gilde monthly P&L workbook",
+    "ingest_profile": {
+      "trained": true,
+      "auto_merge": true,
+      "confidence": 1.0,
+      "parser": "gilde_pl",
+      "format_name": "Gilde monthly P&L (rows × Jan–Dec columns)",
+      "file_types": [
+        "xlsx"
+      ],
+      "multi_sheet": true,
+      "data_type": "mixed",
+      "target_store": "mixed",
+      "store_reason": "Gilde P&L spans materials, subs, billing, overhead — split by GL prefix",
+      "detected_system": "Gilde",
+      "column_mapping": {
+        "date": "date",
+        "gl_account": "gl_account",
+        "debit": "debit",
+        "credit": "credit",
+        "description": "description"
+      },
+      "auto_approve_gl": true,
+      "summary": "Portfolio Company Andijk — Gilde monthly P&L workbook. Each sheet is a year/quarter; rows are GL lines, columns are Dutch month abbreviations (Jan–Dec).",
+      "quality_checks": [
+        "Trained Gilde parser — unpivots month columns to dated rows",
+        "Mid-month date assigned per month cell",
+        "Location fixed: Andijk"
+      ],
+      "controller_question": "Merge Andijk Gilde P&L into central database?"
+    }
   },
   {
     "opco_id": "OPCO-WINSCHOTEN",
@@ -40,7 +148,51 @@
     "lat": 53.144,
     "lng": 7.036,
     "source_system": "Exact",
-    "data_folder": "datasets/Altis dataset 2.xlsx",
-    "notes": "Transaction journal sheets 2023\u20132026"
+    "data_folder": "Altis dataset 2",
+    "filename_patterns": [
+      "winschoten",
+      "altis dataset 2"
+    ],
+    "notes": "Exact transaction journals 2023–2026",
+    "ingest_profile": {
+      "trained": true,
+      "auto_merge": true,
+      "confidence": 1.0,
+      "parser": "exact_multi_year",
+      "format_name": "Exact multi-year journals + invoice tab",
+      "file_types": [
+        "xlsx"
+      ],
+      "multi_sheet": true,
+      "expected_sheets": [
+        "2023",
+        "2024",
+        "2025",
+        "2026",
+        "Company E 2026"
+      ],
+      "data_type": "revenue",
+      "target_store": "revenue",
+      "store_reason": "Verkoop journals and invoices — billing/revenue store",
+      "detected_system": "Exact",
+      "column_mapping": {
+        "date": "date",
+        "gl_account": "gl_account",
+        "debit": "debit",
+        "credit": "credit",
+        "description": "description"
+      },
+      "default_gl_categories": {
+        "8000": "billing"
+      },
+      "auto_approve_gl": true,
+      "summary": "Portfolio Company Winschoten — Exact export with year tabs (2023–2026) plus invoice sheet. Datum/Debet/Credit columns; Verkoop journal → GL 8000.",
+      "quality_checks": [
+        "Trained parser merges all year tabs automatically",
+        "BTW/VAT column ignored — amounts from debit/credit",
+        "Location fixed: Winschoten"
+      ],
+      "controller_question": "Merge Winschoten Exact journals into central database?"
+    }
   }
 ]

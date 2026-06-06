@@ -1,0 +1,806 @@
+{
+  "weekStart": "2026-06-01",
+  "horizonWeeks": 13,
+  "days": [
+    {
+      "date": "2026-06-01",
+      "city": "Heeze",
+      "rainfallMm": 0.0,
+      "tempMinC": 11.0,
+      "tempMaxC": 23.0,
+      "stoppageReasons": [],
+      "isStoppage": false
+    },
+    {
+      "date": "2026-06-02",
+      "city": "Heeze",
+      "rainfallMm": 6.4,
+      "tempMinC": 13.9,
+      "tempMaxC": 22.6,
+      "stoppageReasons": [
+        "rain"
+      ],
+      "isStoppage": true
+    },
+    {
+      "date": "2026-06-03",
+      "city": "Heeze",
+      "rainfallMm": 7.0,
+      "tempMinC": 13.0,
+      "tempMaxC": 19.3,
+      "stoppageReasons": [
+        "rain"
+      ],
+      "isStoppage": true
+    },
+    {
+      "date": "2026-06-04",
+      "city": "Heeze",
+      "rainfallMm": 11.0,
+      "tempMinC": 13.1,
+      "tempMaxC": 17.0,
+      "stoppageReasons": [
+        "rain"
+      ],
+      "isStoppage": true
+    },
+    {
+      "date": "2026-06-05",
+      "city": "Heeze",
+      "rainfallMm": 1.1,
+      "tempMinC": 13.0,
+      "tempMaxC": 18.0,
+      "stoppageReasons": [],
+      "isStoppage": false
+    },
+    {
+      "date": "2026-06-06",
+      "city": "Heeze",
+      "rainfallMm": 1.9,
+      "tempMinC": 9.2,
+      "tempMaxC": 19.6,
+      "stoppageReasons": [],
+      "isStoppage": false
+    },
+    {
+      "date": "2026-06-07",
+      "city": "Heeze",
+      "rainfallMm": 0.3,
+      "tempMinC": 12.3,
+      "tempMaxC": 18.8,
+      "stoppageReasons": [],
+      "isStoppage": false
+    },
+    {
+      "date": "2026-06-08",
+      "city": "Heeze",
+      "rainfallMm": 5.0,
+      "tempMinC": 12.0,
+      "tempMaxC": 21.6,
+      "stoppageReasons": [
+        "rain"
+      ],
+      "isStoppage": true
+    },
+    {
+      "date": "2026-06-09",
+      "city": "Heeze",
+      "rainfallMm": 9.0,
+      "tempMinC": 11.1,
+      "tempMaxC": 17.7,
+      "stoppageReasons": [
+        "rain"
+      ],
+      "isStoppage": true
+    },
+    {
+      "date": "2026-06-10",
+      "city": "Heeze",
+      "rainfallMm": 7.2,
+      "tempMinC": 9.8,
+      "tempMaxC": 16.1,
+      "stoppageReasons": [
+        "rain"
+      ],
+      "isStoppage": true
+    },
+    {
+      "date": "2026-06-11",
+      "city": "Heeze",
+      "rainfallMm": 5.7,
+      "tempMinC": 8.9,
+      "tempMaxC": 18.2,
+      "stoppageReasons": [
+        "rain"
+      ],
+      "isStoppage": true
+    },
+    {
+      "date": "2026-06-12",
+      "city": "Heeze",
+      "rainfallMm": 0.6,
+      "tempMinC": 11.8,
+      "tempMaxC": 20.6,
+      "stoppageReasons": [],
+      "isStoppage": false
+    },
+    {
+      "date": "2026-06-13",
+      "city": "Heeze",
+      "rainfallMm": 2.1,
+      "tempMinC": 13.4,
+      "tempMaxC": 17.6,
+      "stoppageReasons": [],
+      "isStoppage": false
+    },
+    {
+      "date": "2026-06-14",
+      "city": "Heeze",
+      "rainfallMm": 0.9,
+      "tempMinC": 12.4,
+      "tempMaxC": 18.5,
+      "stoppageReasons": [],
+      "isStoppage": false
+    },
+    {
+      "date": "2026-06-15",
+      "city": "Heeze",
+      "rainfallMm": 0.0,
+      "tempMinC": 12.2,
+      "tempMaxC": 20.6,
+      "stoppageReasons": [],
+      "isStoppage": false
+    },
+    {
+      "date": "2026-06-16",
+      "city": "Heeze",
+      "rainfallMm": 0.0,
+      "tempMinC": 15.5,
+      "tempMaxC": 25.8,
+      "stoppageReasons": [],
+      "isStoppage": false
+    },
+    {
+      "date": "2026-06-17",
+      "city": "Heeze",
+      "rainfallMm": 0.0,
+      "tempMinC": 15.3,
+      "tempMaxC": 23.1,
+      "stoppageReasons": [],
+      "isStoppage": false
+    },
+    {
+      "date": "2026-06-18",
+      "city": "Heeze",
+      "rainfallMm": 0.0,
+      "tempMinC": 11.8,
+      "tempMaxC": 20.7,
+      "stoppageReasons": [],
+      "isStoppage": false
+    },
+    {
+      "date": "2026-06-19",
+      "city": "Heeze",
+      "rainfallMm": 0.0,
+      "tempMinC": 11.8,
+      "tempMaxC": 18.8,
+      "stoppageReasons": [],
+      "isStoppage": false
+    },
+    {
+      "date": "2026-06-20",
+      "city": "Heeze",
+      "rainfallMm": 0.0,
+      "tempMinC": 11.3,
+      "tempMaxC": 24.4,
+      "stoppageReasons": [],
+      "isStoppage": false
+    },
+    {
+      "date": "2026-06-21",
+      "city": "Heeze",
+      "rainfallMm": 2.1,
+      "tempMinC": 16.1,
+      "tempMaxC": 23.4,
+      "stoppageReasons": [],
+      "isStoppage": false
+    },
+    {
+      "date": "2026-06-01",
+      "city": "Brunssum",
+      "rainfallMm": 1.2,
+      "tempMinC": 13.8,
+      "tempMaxC": 24.5,
+      "stoppageReasons": [],
+      "isStoppage": false
+    },
+    {
+      "date": "2026-06-02",
+      "city": "Brunssum",
+      "rainfallMm": 5.9,
+      "tempMinC": 15.7,
+      "tempMaxC": 23.3,
+      "stoppageReasons": [
+        "rain"
+      ],
+      "isStoppage": true
+    },
+    {
+      "date": "2026-06-03",
+      "city": "Brunssum",
+      "rainfallMm": 5.8,
+      "tempMinC": 12.9,
+      "tempMaxC": 19.1,
+      "stoppageReasons": [
+        "rain"
+      ],
+      "isStoppage": true
+    },
+    {
+      "date": "2026-06-04",
+      "city": "Brunssum",
+      "rainfallMm": 8.7,
+      "tempMinC": 13.5,
+      "tempMaxC": 17.4,
+      "stoppageReasons": [
+        "rain"
+      ],
+      "isStoppage": true
+    },
+    {
+      "date": "2026-06-05",
+      "city": "Brunssum",
+      "rainfallMm": 0.9,
+      "tempMinC": 12.3,
+      "tempMaxC": 19.2,
+      "stoppageReasons": [],
+      "isStoppage": false
+    },
+    {
+      "date": "2026-06-06",
+      "city": "Brunssum",
+      "rainfallMm": 1.3,
+      "tempMinC": 11.0,
+      "tempMaxC": 21.2,
+      "stoppageReasons": [],
+      "isStoppage": false
+    },
+    {
+      "date": "2026-06-07",
+      "city": "Brunssum",
+      "rainfallMm": 0.0,
+      "tempMinC": 12.6,
+      "tempMaxC": 19.8,
+      "stoppageReasons": [],
+      "isStoppage": false
+    },
+    {
+      "date": "2026-06-08",
+      "city": "Brunssum",
+      "rainfallMm": 2.4,
+      "tempMinC": 14.4,
+      "tempMaxC": 21.7,
+      "stoppageReasons": [],
+      "isStoppage": false
+    },
+    {
+      "date": "2026-06-09",
+      "city": "Brunssum",
+      "rainfallMm": 5.4,
+      "tempMinC": 10.9,
+      "tempMaxC": 16.6,
+      "stoppageReasons": [
+        "rain"
+      ],
+      "isStoppage": true
+    },
+    {
+      "date": "2026-06-10",
+      "city": "Brunssum",
+      "rainfallMm": 1.5,
+      "tempMinC": 10.0,
+      "tempMaxC": 16.8,
+      "stoppageReasons": [],
+      "isStoppage": false
+    },
+    {
+      "date": "2026-06-11",
+      "city": "Brunssum",
+      "rainfallMm": 2.1,
+      "tempMinC": 9.0,
+      "tempMaxC": 17.6,
+      "stoppageReasons": [],
+      "isStoppage": false
+    },
+    {
+      "date": "2026-06-12",
+      "city": "Brunssum",
+      "rainfallMm": 2.4,
+      "tempMinC": 12.4,
+      "tempMaxC": 18.2,
+      "stoppageReasons": [],
+      "isStoppage": false
+    },
+    {
+      "date": "2026-06-13",
+      "city": "Brunssum",
+      "rainfallMm": 2.4,
+      "tempMinC": 13.9,
+      "tempMaxC": 20.9,
+      "stoppageReasons": [],
+      "isStoppage": false
+    },
+    {
+      "date": "2026-06-14",
+      "city": "Brunssum",
+      "rainfallMm": 1.2,
+      "tempMinC": 11.7,
+      "tempMaxC": 17.3,
+      "stoppageReasons": [],
+      "isStoppage": false
+    },
+    {
+      "date": "2026-06-15",
+      "city": "Brunssum",
+      "rainfallMm": 0.0,
+      "tempMinC": 11.8,
+      "tempMaxC": 19.7,
+      "stoppageReasons": [],
+      "isStoppage": false
+    },
+    {
+      "date": "2026-06-16",
+      "city": "Brunssum",
+      "rainfallMm": 0.0,
+      "tempMinC": 15.3,
+      "tempMaxC": 25.3,
+      "stoppageReasons": [],
+      "isStoppage": false
+    },
+    {
+      "date": "2026-06-17",
+      "city": "Brunssum",
+      "rainfallMm": 0.0,
+      "tempMinC": 16.1,
+      "tempMaxC": 23.5,
+      "stoppageReasons": [],
+      "isStoppage": false
+    },
+    {
+      "date": "2026-06-18",
+      "city": "Brunssum",
+      "rainfallMm": 0.0,
+      "tempMinC": 12.1,
+      "tempMaxC": 20.5,
+      "stoppageReasons": [],
+      "isStoppage": false
+    },
+    {
+      "date": "2026-06-19",
+      "city": "Brunssum",
+      "rainfallMm": 0.0,
+      "tempMinC": 11.2,
+      "tempMaxC": 19.6,
+      "stoppageReasons": [],
+      "isStoppage": false
+    },
+    {
+      "date": "2026-06-20",
+      "city": "Brunssum",
+      "rainfallMm": 0.0,
+      "tempMinC": 11.9,
+      "tempMaxC": 22.8,
+      "stoppageReasons": [],
+      "isStoppage": false
+    },
+    {
+      "date": "2026-06-21",
+      "city": "Brunssum",
+      "rainfallMm": 6.3,
+      "tempMinC": 15.5,
+      "tempMaxC": 25.6,
+      "stoppageReasons": [
+        "rain"
+      ],
+      "isStoppage": true
+    },
+    {
+      "date": "2026-06-01",
+      "city": "Andijk",
+      "rainfallMm": 0.0,
+      "tempMinC": 13.6,
+      "tempMaxC": 22.8,
+      "stoppageReasons": [],
+      "isStoppage": false
+    },
+    {
+      "date": "2026-06-02",
+      "city": "Andijk",
+      "rainfallMm": 2.4,
+      "tempMinC": 15.2,
+      "tempMaxC": 20.2,
+      "stoppageReasons": [],
+      "isStoppage": false
+    },
+    {
+      "date": "2026-06-03",
+      "city": "Andijk",
+      "rainfallMm": 8.0,
+      "tempMinC": 14.0,
+      "tempMaxC": 18.4,
+      "stoppageReasons": [
+        "rain"
+      ],
+      "isStoppage": true
+    },
+    {
+      "date": "2026-06-04",
+      "city": "Andijk",
+      "rainfallMm": 2.4,
+      "tempMinC": 13.7,
+      "tempMaxC": 17.3,
+      "stoppageReasons": [],
+      "isStoppage": false
+    },
+    {
+      "date": "2026-06-05",
+      "city": "Andijk",
+      "rainfallMm": 4.7,
+      "tempMinC": 14.4,
+      "tempMaxC": 18.9,
+      "stoppageReasons": [],
+      "isStoppage": false
+    },
+    {
+      "date": "2026-06-06",
+      "city": "Andijk",
+      "rainfallMm": 0.0,
+      "tempMinC": 13.2,
+      "tempMaxC": 19.7,
+      "stoppageReasons": [],
+      "isStoppage": false
+    },
+    {
+      "date": "2026-06-07",
+      "city": "Andijk",
+      "rainfallMm": 6.2,
+      "tempMinC": 13.2,
+      "tempMaxC": 17.9,
+      "stoppageReasons": [
+        "rain"
+      ],
+      "isStoppage": true
+    },
+    {
+      "date": "2026-06-08",
+      "city": "Andijk",
+      "rainfallMm": 7.8,
+      "tempMinC": 14.0,
+      "tempMaxC": 19.2,
+      "stoppageReasons": [
+        "rain"
+      ],
+      "isStoppage": true
+    },
+    {
+      "date": "2026-06-09",
+      "city": "Andijk",
+      "rainfallMm": 5.7,
+      "tempMinC": 11.6,
+      "tempMaxC": 15.9,
+      "stoppageReasons": [
+        "rain"
+      ],
+      "isStoppage": true
+    },
+    {
+      "date": "2026-06-10",
+      "city": "Andijk",
+      "rainfallMm": 1.6,
+      "tempMinC": 11.1,
+      "tempMaxC": 16.0,
+      "stoppageReasons": [],
+      "isStoppage": false
+    },
+    {
+      "date": "2026-06-11",
+      "city": "Andijk",
+      "rainfallMm": 2.1,
+      "tempMinC": 9.9,
+      "tempMaxC": 16.8,
+      "stoppageReasons": [],
+      "isStoppage": false
+    },
+    {
+      "date": "2026-06-12",
+      "city": "Andijk",
+      "rainfallMm": 3.6,
+      "tempMinC": 12.6,
+      "tempMaxC": 18.0,
+      "stoppageReasons": [],
+      "isStoppage": false
+    },
+    {
+      "date": "2026-06-13",
+      "city": "Andijk",
+      "rainfallMm": 5.4,
+      "tempMinC": 13.0,
+      "tempMaxC": 16.2,
+      "stoppageReasons": [
+        "rain"
+      ],
+      "isStoppage": true
+    },
+    {
+      "date": "2026-06-14",
+      "city": "Andijk",
+      "rainfallMm": 2.4,
+      "tempMinC": 12.5,
+      "tempMaxC": 16.5,
+      "stoppageReasons": [],
+      "isStoppage": false
+    },
+    {
+      "date": "2026-06-15",
+      "city": "Andijk",
+      "rainfallMm": 2.7,
+      "tempMinC": 12.7,
+      "tempMaxC": 16.7,
+      "stoppageReasons": [],
+      "isStoppage": false
+    },
+    {
+      "date": "2026-06-16",
+      "city": "Andijk",
+      "rainfallMm": 0.0,
+      "tempMinC": 15.0,
+      "tempMaxC": 19.0,
+      "stoppageReasons": [],
+      "isStoppage": false
+    },
+    {
+      "date": "2026-06-17",
+      "city": "Andijk",
+      "rainfallMm": 0.6,
+      "tempMinC": 13.9,
+      "tempMaxC": 17.8,
+      "stoppageReasons": [],
+      "isStoppage": false
+    },
+    {
+      "date": "2026-06-18",
+      "city": "Andijk",
+      "rainfallMm": 0.6,
+      "tempMinC": 12.8,
+      "tempMaxC": 15.6,
+      "stoppageReasons": [],
+      "isStoppage": false
+    },
+    {
+      "date": "2026-06-19",
+      "city": "Andijk",
+      "rainfallMm": 0.0,
+      "tempMinC": 12.8,
+      "tempMaxC": 15.1,
+      "stoppageReasons": [],
+      "isStoppage": false
+    },
+    {
+      "date": "2026-06-20",
+      "city": "Andijk",
+      "rainfallMm": 0.0,
+      "tempMinC": 12.8,
+      "tempMaxC": 18.4,
+      "stoppageReasons": [],
+      "isStoppage": false
+    },
+    {
+      "date": "2026-06-21",
+      "city": "Andijk",
+      "rainfallMm": 5.1,
+      "tempMinC": 13.8,
+      "tempMaxC": 19.1,
+      "stoppageReasons": [
+        "rain"
+      ],
+      "isStoppage": true
+    },
+    {
+      "date": "2026-06-01",
+      "city": "Winschoten",
+      "rainfallMm": 0.0,
+      "tempMinC": 12.1,
+      "tempMaxC": 23.8,
+      "stoppageReasons": [],
+      "isStoppage": false
+    },
+    {
+      "date": "2026-06-02",
+      "city": "Winschoten",
+      "rainfallMm": 7.4,
+      "tempMinC": 14.4,
+      "tempMaxC": 24.8,
+      "stoppageReasons": [
+        "rain"
+      ],
+      "isStoppage": true
+    },
+    {
+      "date": "2026-06-03",
+      "city": "Winschoten",
+      "rainfallMm": 3.1,
+      "tempMinC": 13.9,
+      "tempMaxC": 20.3,
+      "stoppageReasons": [],
+      "isStoppage": false
+    },
+    {
+      "date": "2026-06-04",
+      "city": "Winschoten",
+      "rainfallMm": 4.3,
+      "tempMinC": 13.1,
+      "tempMaxC": 17.5,
+      "stoppageReasons": [],
+      "isStoppage": false
+    },
+    {
+      "date": "2026-06-05",
+      "city": "Winschoten",
+      "rainfallMm": 5.4,
+      "tempMinC": 12.2,
+      "tempMaxC": 19.3,
+      "stoppageReasons": [
+        "rain"
+      ],
+      "isStoppage": true
+    },
+    {
+      "date": "2026-06-06",
+      "city": "Winschoten",
+      "rainfallMm": 1.0,
+      "tempMinC": 11.6,
+      "tempMaxC": 21.0,
+      "stoppageReasons": [],
+      "isStoppage": false
+    },
+    {
+      "date": "2026-06-07",
+      "city": "Winschoten",
+      "rainfallMm": 1.9,
+      "tempMinC": 12.6,
+      "tempMaxC": 18.4,
+      "stoppageReasons": [],
+      "isStoppage": false
+    },
+    {
+      "date": "2026-06-08",
+      "city": "Winschoten",
+      "rainfallMm": 4.2,
+      "tempMinC": 12.9,
+      "tempMaxC": 22.2,
+      "stoppageReasons": [],
+      "isStoppage": false
+    },
+    {
+      "date": "2026-06-09",
+      "city": "Winschoten",
+      "rainfallMm": 9.1,
+      "tempMinC": 11.2,
+      "tempMaxC": 15.9,
+      "stoppageReasons": [
+        "rain"
+      ],
+      "isStoppage": true
+    },
+    {
+      "date": "2026-06-10",
+      "city": "Winschoten",
+      "rainfallMm": 0.6,
+      "tempMinC": 9.8,
+      "tempMaxC": 16.2,
+      "stoppageReasons": [],
+      "isStoppage": false
+    },
+    {
+      "date": "2026-06-11",
+      "city": "Winschoten",
+      "rainfallMm": 3.3,
+      "tempMinC": 8.7,
+      "tempMaxC": 15.6,
+      "stoppageReasons": [],
+      "isStoppage": false
+    },
+    {
+      "date": "2026-06-12",
+      "city": "Winschoten",
+      "rainfallMm": 3.0,
+      "tempMinC": 10.8,
+      "tempMaxC": 18.7,
+      "stoppageReasons": [],
+      "isStoppage": false
+    },
+    {
+      "date": "2026-06-13",
+      "city": "Winschoten",
+      "rainfallMm": 7.5,
+      "tempMinC": 12.3,
+      "tempMaxC": 14.5,
+      "stoppageReasons": [
+        "rain"
+      ],
+      "isStoppage": true
+    },
+    {
+      "date": "2026-06-14",
+      "city": "Winschoten",
+      "rainfallMm": 0.9,
+      "tempMinC": 10.9,
+      "tempMaxC": 17.2,
+      "stoppageReasons": [],
+      "isStoppage": false
+    },
+    {
+      "date": "2026-06-15",
+      "city": "Winschoten",
+      "rainfallMm": 1.8,
+      "tempMinC": 11.7,
+      "tempMaxC": 16.5,
+      "stoppageReasons": [],
+      "isStoppage": false
+    },
+    {
+      "date": "2026-06-16",
+      "city": "Winschoten",
+      "rainfallMm": 0.6,
+      "tempMinC": 14.3,
+      "tempMaxC": 19.7,
+      "stoppageReasons": [],
+      "isStoppage": false
+    },
+    {
+      "date": "2026-06-17",
+      "city": "Winschoten",
+      "rainfallMm": 0.6,
+      "tempMinC": 14.0,
+      "tempMaxC": 17.2,
+      "stoppageReasons": [],
+      "isStoppage": false
+    },
+    {
+      "date": "2026-06-18",
+      "city": "Winschoten",
+      "rainfallMm": 0.6,
+      "tempMinC": 12.9,
+      "tempMaxC": 14.4,
+      "stoppageReasons": [],
+      "isStoppage": false
+    },
+    {
+      "date": "2026-06-19",
+      "city": "Winschoten",
+      "rainfallMm": 0.6,
+      "tempMinC": 12.2,
+      "tempMaxC": 14.7,
+      "stoppageReasons": [],
+      "isStoppage": false
+    },
+    {
+      "date": "2026-06-20",
+      "city": "Winschoten",
+      "rainfallMm": 0.6,
+      "tempMinC": 11.8,
+      "tempMaxC": 18.5,
+      "stoppageReasons": [],
+      "isStoppage": false
+    },
+    {
+      "date": "2026-06-21",
+      "city": "Winschoten",
+      "rainfallMm": 2.4,
+      "tempMinC": 13.7,
+      "tempMaxC": 19.8,
+      "stoppageReasons": [],
+      "isStoppage": false
+    }
+  ]
+}
